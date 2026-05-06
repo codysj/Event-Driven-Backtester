@@ -23,10 +23,12 @@ npm run dev
 Build for production:
 
 ```bash
+npm run lint
+npm run typecheck
 npm run build
 ```
 
-There is currently no `npm run lint` or standalone `npm run typecheck` script. `npm run build` runs the Next.js production build and TypeScript validity checks.
+`npm run lint` uses ESLint with the Next.js core web vitals and TypeScript rules. `npm run typecheck` runs `next typegen && tsc --noEmit` so route/layout types exist before TypeScript validation. `npm run build` skips Next's internal lint hook because linting is run explicitly as a separate command.
 
 ## Dependency Security
 
@@ -53,6 +55,12 @@ python -m uvicorn backtester.api.main:app --reload
 ```
 
 The API currently allows browser requests from `http://localhost:3000` and `http://127.0.0.1:3000`.
+
+To use another local frontend port, set `BACKTESTER_CORS_ORIGINS` before starting the backend:
+
+```bash
+BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
+```
 
 ## UI Structure
 

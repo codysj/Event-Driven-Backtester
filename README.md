@@ -97,10 +97,12 @@ Build the frontend:
 
 ```bash
 cd frontend
+npm run lint
+npm run typecheck
 npm run build
 ```
 
-There is currently no configured frontend lint or standalone typecheck script. `npm run build` performs the Next.js production build and TypeScript validity check.
+`npm run lint` uses ESLint with the Next.js core web vitals and TypeScript rules. `npm run typecheck` runs `next typegen && tsc --noEmit`.
 
 ## Backtest Lab Dashboard
 
@@ -151,6 +153,12 @@ By default, the frontend calls `http://localhost:8000`. Override this with `fron
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+By default, the API allows browser requests from `http://localhost:3000` and `http://127.0.0.1:3000`. To use another frontend origin, set a comma-separated backend environment variable before starting FastAPI:
+
+```bash
+BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
 ## Local API + Frontend Workflow
@@ -251,17 +259,20 @@ Generate example chart PNGs:
 python examples/generate_charts.py
 ```
 
-Backtest Lab screenshot assets are not currently committed. To add portfolio screenshots, start the API and frontend, run the default AAPL backtest, and capture the dashboard at desktop width. Keep generated screenshots small and intentional.
+Backtest Lab screenshot assets are not currently committed. Regenerate dashboard screenshots on demand for portfolio materials: start the API and frontend, run the default AAPL backtest, and capture the dashboard at desktop width. Keep generated screenshots small and intentional if they are later committed.
 
 ## Testing And CI
 
 Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 
 - Install Python 3.11 dependencies from `requirements.txt`.
-- Run `pytest`.
-- Run `mypy backtester`.
-
-Frontend CI is not currently configured. Run `cd frontend && npm run build` locally for dashboard changes.
+- Run `python -m pytest`.
+- Run `python -m mypy backtester`.
+- Install frontend dependencies with `npm ci`.
+- Run `npm audit`.
+- Run `npm run lint`.
+- Run `npm run typecheck`.
+- Run `npm run build`.
 
 ## Known Limitations
 
@@ -273,7 +284,6 @@ Frontend CI is not currently configured. Run `cd frontend && npm run build` loca
 - No live trading or order placement.
 - No paid data feed integration.
 - yfinance-backed workflows may require network access unless data is cached.
-- Frontend has no lint script today.
 - Benchmark documentation still lacks a measured pre-optimization baseline comparison.
 - The frontend uses an npm override to keep Next's nested PostCSS dependency on a patched 8.5.x release until Next publishes a stable line that no longer needs the override.
 

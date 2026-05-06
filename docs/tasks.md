@@ -2,12 +2,12 @@
 
 ## Now
 
-- Add frontend build to `.github/workflows/ci.yml` if Node build time is acceptable.
-- Add a frontend lint script and decide on ESLint rules.
-- Add an explicit frontend typecheck script if useful beyond `next build`.
-- Keep frontend dependency audit clean during future upgrades; do not remove the PostCSS override until it is no longer needed.
-- Decide whether generated chart/dashboard screenshots in `docs/` should be committed or regenerated on demand.
-- Consider making API CORS origins configurable for non-3000 frontend dev ports.
+- No active Now tasks. The previous Now batch was completed on 2026-05-06:
+  - Frontend lint, typecheck, audit, and build were added to CI.
+  - Frontend lint and typecheck scripts were added.
+  - The frontend dependency audit remained clean with the existing PostCSS override.
+  - Dashboard screenshots are regenerated on demand unless a future portfolio asset is intentionally committed.
+  - API CORS origins can be configured with `BACKTESTER_CORS_ORIGINS`.
 
 ## Next
 
@@ -15,7 +15,7 @@
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.
 - Add CLI support for multi-asset backtests.
 - Add API tests for service conversion with fake loader/service injection to avoid network/data dependencies.
-- Add a small screenshot or short GIF asset for the remodeled Backtest Lab.
+- Add a small screenshot or short GIF asset for the remodeled Backtest Lab if a committed portfolio asset is desired.
 - Measure a pre-optimization benchmark baseline and update `docs/benchmark_results.md`.
 
 ## Later

@@ -167,8 +167,8 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - API CORS currently allows:
   - `http://localhost:3000`
   - `http://127.0.0.1:3000`
-- CI is `.github/workflows/ci.yml`; it installs Python requirements, runs `pytest`, and runs `mypy backtester`.
-- Frontend build is not currently part of CI.
+- Additional API CORS origins can be configured with comma-separated `BACKTESTER_CORS_ORIGINS`.
+- CI is `.github/workflows/ci.yml`; it installs Python requirements, runs `python -m pytest`, runs `python -m mypy backtester`, installs frontend dependencies with `npm ci`, runs `npm audit`, runs `npm run lint`, runs `npm run typecheck`, and runs `npm run build`.
 
 ## Important Design Decisions
 
@@ -183,11 +183,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 
 ## Needs Confirmation
 
-- Whether frontend checks should be added to CI. Current CI is Python-only.
 - Whether to expose multi-asset backtesting in API, CLI, and Backtest Lab.
-- Whether to commit generated dashboard screenshots long-term or regenerate them on demand.
-- Whether API CORS should support configurable frontend origins.
+- Whether generated dashboard screenshots should ever be committed; current policy is to regenerate them on demand.
 - Whether CLI should expose multi-asset backtesting.
 - Whether live yfinance examples should be replaced with fully synthetic defaults for all demo paths.
-- Whether frontend lint/typecheck scripts should be added.
-

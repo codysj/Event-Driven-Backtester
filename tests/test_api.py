@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from backtester.api.main import app
+from backtester.api.main import get_cors_origins
 from backtester.api.schemas import (
     BacktestResponse,
     BacktestSeries,
@@ -19,6 +20,18 @@ def test_health_returns_ok() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_cors_origins_default_to_local_frontend_ports(monkeypatch) -> None:
+    monkeypatch.delenv("BACKTESTER_CORS_ORIGINS", raising=False)
+
+    assert get_cors_origins() == ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def test_cors_origins_can_be_configured_from_comma_separated_value() -> None:
+    origins = get_cors_origins("http://localhost:3001, https://example.test, ")
+
+    assert origins == ["http://localhost:3001", "https://example.test"]
 
 
 def test_strategies_returns_supported_strategies() -> None:
