@@ -4,15 +4,45 @@
 
 :root {
   color-scheme: dark;
+  --background: #070a12;
+  --surface: #0e1422;
+  --surface-secondary: #111827;
+  --card: #151b2d;
+  --border: #253044;
+  --text: #e6edf7;
+  --text-secondary: #98a2b3;
+  --text-muted: #667085;
+  --accent: #3b82f6;
+  --accent-cyan: #38bdf8;
+  --positive: #22c55e;
+  --negative: #ef4444;
+  --warning: #f59e0b;
+  --grid: #1f2937;
 }
 
 body {
   min-height: 100vh;
-  background: #020617;
-  color: #e5e7eb;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.09), transparent 32rem),
+    linear-gradient(135deg, #070a12 0%, #09111f 48%, #070a12 100%);
+  color: var(--text);
+  font-family: Inter, "Geist Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * {
   box-sizing: border-box;
 }
 
+.font-mono-finance {
+  font-family: "JetBrains Mono", "Geist Mono", "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+::selection {
+  background: rgba(59, 130, 246, 0.35);
+}
+
+input,
+select,
+button {
+  font: inherit;
+}

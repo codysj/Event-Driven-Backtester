@@ -1,4 +1,4 @@
-import type { BacktestRequest, BacktestResponse, StrategyMetadata } from "./types";
+import type { BacktestRequest, BacktestResponse, HealthResponse, StrategyMetadata } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -24,10 +24,13 @@ export async function fetchStrategies(): Promise<StrategyMetadata[]> {
   return response.strategies;
 }
 
+export async function fetchHealth(): Promise<HealthResponse> {
+  return requestJson<HealthResponse>("/health");
+}
+
 export async function runBacktest(request: BacktestRequest): Promise<BacktestResponse> {
   return requestJson<BacktestResponse>("/api/backtest", {
     method: "POST",
     body: JSON.stringify(request)
   });
 }
-

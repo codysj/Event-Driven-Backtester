@@ -1,101 +1,130 @@
 "use client";
 
-import { Activity, Github } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AppShell } from "../components/AppShell";
 import { BacktestForm } from "../components/BacktestForm";
 import { ResultsDashboard } from "../components/ResultsDashboard";
-import { fetchStrategies, runBacktest } from "../lib/api";
+import { fetchHealth, fetchStrategies, runBacktest } from "../lib/api";
+import { DEFAULT_BACKTEST_REQUEST, FALLBACK_STRATEGIES } from "../lib/defaults";
 import type { BacktestRequest, BacktestResponse, StrategyMetadata } from "../lib/types";
+import { hasErrors, validateBacktestRequest, type FormErrors } from "../lib/validation";
 
-const fallbackStrategies: StrategyMetadata[] = [
-  {
-    id: "momentum",
-    name: "Momentum SMA Crossover",
-    description: "Uses fast and slow moving average crossovers to generate buy/sell signals.",
-    parameters: [
-      { name: "fast_window", type: "integer", default: 10, min: 1, label: "Fast Window" },
-      { name: "slow_window", type: "integer", default: 50, min: 2, label: "Slow Window" }
-    ]
-  },
-  {
-    id: "mean_reversion",
-    name: "Mean Reversion",
-    description: "Uses Bollinger-style bands to identify overextended prices.",
-    parameters: [
-      { name: "window", type: "integer", default: 20, min: 1, label: "Window" },
-      { name: "num_std", type: "number", default: 2, min: 0.1, label: "Standard Deviations" }
-    ]
-  }
-];
+type ApiStatus = "checking" | "online" | "offline";
+
+function cloneDefaultRequest(): BacktestRequest {
+  return {
+    ...DEFAULT_BACKTEST_REQUEST,
+    parameters: { ...DEFAULT_BACKTEST_REQUEST.parameters }
+  };
+}
 
 export default function HomePage() {
-  const [strategies, setStrategies] = useState<StrategyMetadata[]>(fallbackStrategies);
+  const [strategies, setStrategies] = useState<StrategyMetadata[]>(FALLBACK_STRATEGIES);
+  const [request, setRequest] = useState<BacktestRequest>(cloneDefaultRequest);
   const [result, setResult] = useState<BacktestResponse | null>(null);
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
 
   useEffect(() => {
+    fetchHealth()
+      .then(() => setApiStatus("online"))
+      .catch(() => setApiStatus("offline"));
+
     fetchStrategies()
-      .then(setStrategies)
-      .catch(() => setStrategies(fallbackStrategies));
+      .then((items) => {
+        setStrategies(items);
+        setApiStatus("online");
+      })
+      .catch(() => setStrategies(FALLBACK_STRATEGIES));
   }, []);
 
-  async function handleSubmit(request: BacktestRequest) {
+  const selectedStrategy = useMemo(
+    () => strategies.find((strategy) => strategy.id === request.strategy),
+    [request.strategy, strategies]
+  );
+
+  function updateRequest(nextRequest: BacktestRequest) {
+    setRequest(nextRequest);
+    if (Object.keys(formErrors).length > 0) {
+      const strategy = strategies.find((item) => item.id === nextRequest.strategy);
+      setFormErrors(validateBacktestRequest(nextRequest, strategy));
+    }
+  }
+
+  function resetDefaults() {
+    setRequest(cloneDefaultRequest());
+    setFormErrors({});
+    setError(null);
+  }
+
+  async function submitBacktest(nextRequest = request) {
+    const strategy = strategies.find((item) => item.id === nextRequest.strategy) ?? selectedStrategy;
+    const validationErrors = validateBacktestRequest(nextRequest, strategy);
+    setFormErrors(validationErrors);
+    if (hasErrors(validationErrors)) {
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const response = await runBacktest(request);
+      const response = await runBacktest({
+        ...nextRequest,
+        ticker: nextRequest.ticker.trim().toUpperCase()
+      });
       setResult(response);
+      setApiStatus("online");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not run the backtest.");
+      setApiStatus("offline");
     } finally {
       setIsLoading(false);
     }
   }
 
+  function runDefault() {
+    const defaultRequest = cloneDefaultRequest();
+    setRequest(defaultRequest);
+    void submitBacktest(defaultRequest);
+  }
+
   return (
-    <main className="min-h-screen bg-slate-950">
-      <header className="border-b border-slate-800 bg-slate-950/95 px-6 py-5">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-400 text-slate-950">
-              <Activity size={22} />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold text-slate-100">Backtest Lab</h1>
-              <p className="text-sm text-slate-400">Strategy research dashboard powered by a Python backtesting engine</p>
-            </div>
-          </div>
-          <a href="#" className="hidden items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:border-slate-500 md:flex">
-            <Github size={16} />
-            GitHub
-          </a>
-        </div>
-      </header>
+    <AppShell
+      request={request}
+      strategies={strategies}
+      apiStatus={apiStatus}
+      isLoading={isLoading}
+      onRun={() => void submitBacktest()}
+      onReset={resetDefaults}
+      configPanel={
+        <BacktestForm
+          request={request}
+          strategies={strategies}
+          errors={formErrors}
+          isLoading={isLoading}
+          onChange={updateRequest}
+          onSubmit={() => void submitBacktest()}
+          onReset={resetDefaults}
+        />
+      }
+    >
+      <ResultsDashboard
+        result={result}
+        request={request}
+        strategies={strategies}
+        isLoading={isLoading}
+        error={error}
+        onRunDefault={runDefault}
+      />
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-6 py-6 lg:grid-cols-[360px_1fr]">
-        <aside className="rounded-lg border border-slate-800 bg-slate-900/70 p-5">
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold text-slate-100">Backtest Controls</h2>
-            <p className="mt-1 text-sm text-slate-400">Configure a historical simulation. This is research only, not live trading.</p>
-          </div>
-          <BacktestForm strategies={strategies} isLoading={isLoading} onSubmit={handleSubmit} />
-        </aside>
-
-        <section>
-          {error ? (
-            <div className="mb-4 rounded-lg border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-200">
-              {error}
-            </div>
-          ) : null}
-          {isLoading ? (
-            <div className="mb-4 rounded-lg border border-sky-900 bg-sky-950/40 p-4 text-sm text-sky-200">
-              Running simulation and preparing results...
-            </div>
-          ) : null}
-          <ResultsDashboard result={result} />
-        </section>
-      </div>
-    </main>
+      <section id="docs" className="mt-5 rounded-xl border border-lab-border bg-lab-surface p-4">
+        <h2 className="text-sm font-semibold text-lab-text">Local API</h2>
+        <p className="mt-2 text-sm leading-6 text-lab-secondary">
+          Start FastAPI with <code className="font-mono-finance text-lab-text">python -m uvicorn backtester.api.main:app --reload</code>. The dashboard calls the existing API and keeps backtesting logic server-side.
+        </p>
+      </section>
+    </AppShell>
   );
 }

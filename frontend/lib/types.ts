@@ -1,5 +1,12 @@
 export type StrategyId = "momentum" | "mean_reversion";
 
+export type PositionSizeMethod =
+  | "FIXED_DOLLAR"
+  | "FIXED_QUANTITY"
+  | "ALL_IN"
+  | "PERCENT_EQUITY"
+  | "VOLATILITY_TARGET";
+
 export type StrategyParameter = {
   name: string;
   type: "integer" | "number";
@@ -23,10 +30,14 @@ export type BacktestRequest = {
   initial_cash: number;
   commission_rate: number;
   slippage_bps: number;
-  position_size_method: string;
+  position_size_method: PositionSizeMethod;
   position_size_value: number;
   benchmark: boolean;
   parameters: Record<string, number>;
+};
+
+export type HealthResponse = {
+  status: string;
 };
 
 export type BacktestSummary = {
@@ -77,4 +88,3 @@ export type BacktestResponse = {
   };
   trades: Trade[];
 };
-
