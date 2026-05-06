@@ -1,5 +1,11 @@
 """Moving-average crossover momentum strategy."""
 
+from __future__ import annotations
+
+import math
+
+import numpy as np
+from numpy.typing import NDArray
 import pandas as pd
 
 from backtester.strategy.base import Signal, Strategy
@@ -21,20 +27,36 @@ class MomentumStrategy(Strategy):
 
         self._fast_window = fast_window
         self._slow_window = slow_window
+        self._fast_sma: NDArray[np.float64] | None = None
+        self._slow_sma: NDArray[np.float64] | None = None
+        self._precomputed_length: int | None = None
 
     @property
     def name(self) -> str:
         return f"Momentum({self._fast_window}/{self._slow_window})"
 
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
+    def precompute(self, data: pd.DataFrame) -> None:
         close = data["close"]
-        if len(close) < self._slow_window + 1:
+        self._fast_sma = close.rolling(self._fast_window).mean().to_numpy(dtype=float)
+        self._slow_sma = close.rolling(self._slow_window).mean().to_numpy(dtype=float)
+        self._precomputed_length = len(data)
+
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        if current_index < self._slow_window:
             return Signal.HOLD
 
-        fast_now = float(close.iloc[-self._fast_window :].mean())
-        fast_prev = float(close.iloc[-self._fast_window - 1 : -1].mean())
-        slow_now = float(close.iloc[-self._slow_window :].mean())
-        slow_prev = float(close.iloc[-self._slow_window - 1 : -1].mean())
+        if self._fast_sma is None or self._slow_sma is None or self._precomputed_length != len(data):
+            self.precompute(data)
+
+        if self._fast_sma is None or self._slow_sma is None:
+            return Signal.HOLD
+
+        fast_now = float(self._fast_sma[current_index])
+        fast_prev = float(self._fast_sma[current_index - 1])
+        slow_now = float(self._slow_sma[current_index])
+        slow_prev = float(self._slow_sma[current_index - 1])
+        if any(math.isnan(value) for value in [fast_now, fast_prev, slow_now, slow_prev]):
+            return Signal.HOLD
 
         if fast_prev <= slow_prev and fast_now > slow_now:
             return Signal.BUY

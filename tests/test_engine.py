@@ -36,7 +36,8 @@ class AlwaysHoldStrategy(Strategy):
     def name(self) -> str:
         return "AlwaysHold"
 
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        del data, current_index
         return Signal.HOLD
 
 
@@ -45,8 +46,9 @@ class BuyFirstBarStrategy(Strategy):
     def name(self) -> str:
         return "BuyFirstBar"
 
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
-        if len(data) == 1:
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        del data
+        if current_index == 0:
             return Signal.BUY
         return Signal.HOLD
 
@@ -56,24 +58,26 @@ class BuyThenSellStrategy(Strategy):
     def name(self) -> str:
         return "BuyThenSell"
 
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
-        if len(data) == 1:
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        del data
+        if current_index == 0:
             return Signal.BUY
-        if len(data) == 2:
+        if current_index == 1:
             return Signal.SELL
         return Signal.HOLD
 
 
-class RecordingLengthStrategy(Strategy):
+class RecordingIndexStrategy(Strategy):
     def __init__(self) -> None:
-        self.lengths: list[int] = []
+        self.indices: list[int] = []
 
     @property
     def name(self) -> str:
-        return "RecordingLength"
+        return "RecordingIndex"
 
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
-        self.lengths.append(len(data))
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        assert len(data) == 4
+        self.indices.append(current_index)
         return Signal.HOLD
 
 
@@ -134,13 +138,13 @@ def test_buy_then_sell_cash_only_after_sell() -> None:
     assert result.equity_curve.iloc[-1] == pytest.approx(1_050.0)
 
 
-def test_lookahead_prevention_records_incremental_lengths() -> None:
-    strategy = RecordingLengthStrategy()
+def test_lookahead_contract_records_incremental_indices() -> None:
+    strategy = RecordingIndexStrategy()
     config = BacktestConfig("AAPL", "2020-01-01", "2020-01-05")
 
     make_engine(make_ohlcv_df([1.0, 2.0, 3.0, 4.0]), strategy, config).run()
 
-    assert strategy.lengths == [1, 2, 3, 4]
+    assert strategy.indices == [0, 1, 2, 3]
 
 
 def test_equity_curve_length_matches_data_length() -> None:

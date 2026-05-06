@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 import pandas as pd
 
@@ -48,16 +49,18 @@ class BacktestEngine:
             initial_cash=self._config.initial_cash,
             commission_rate=self._config.commission_rate,
         )
+        self._strategy.precompute(data)
+        close_array = data["close"].to_numpy(dtype=float)
+        timestamps = pd.to_datetime(data.index).to_pydatetime()
 
         for i in range(len(data)):
-            current_bar = data.iloc[i]
-            timestamp = self._timestamp_at(data, i)
-            current_price = float(current_bar["close"])
+            timestamp = cast(datetime, timestamps[i])
+            current_price = float(close_array[i])
 
-            # This slice is intentionally incremental to prevent look-ahead
-            # bias: the strategy sees bars 0 through i, never future bars.
-            historical_data = data.iloc[: i + 1]
-            signal = self._strategy.generate_signal(historical_data)
+            # Stage 7 avoids per-bar DataFrame copies. Strategies receive the
+            # full DataFrame and must honor current_index as the look-ahead
+            # boundary.
+            signal = self._strategy.generate_signal(data, current_index=i)
             order = self._signal_to_order(
                 signal,
                 self._config.ticker,
@@ -74,7 +77,7 @@ class BacktestEngine:
 
             portfolio.record_equity(timestamp, {self._config.ticker: current_price})
 
-        final_close = float(data.iloc[-1]["close"])
+        final_close = float(close_array[-1])
         return BacktestResult(
             config=self._config,
             strategy_name=self._strategy.name,
@@ -115,10 +118,3 @@ class BacktestEngine:
         if self._config.position_size_method is PositionSizeMethod.FIXED_DOLLAR:
             return int(self._config.position_size_value // price)
         return int(self._config.position_size_value)
-
-    def _timestamp_at(self, data: pd.DataFrame, index: int) -> datetime:
-        timestamp = data.index[index]
-        if isinstance(timestamp, datetime):
-            return timestamp
-        return pd.Timestamp(timestamp).to_pydatetime()
-

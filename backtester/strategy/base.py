@@ -17,11 +17,11 @@ class Signal(Enum):
 class Strategy(ABC):
     """Abstract interface for one-bar-at-a-time strategy decisions.
 
-    ``generate_signal`` receives historical OHLCV data from the first available
-    bar through the current bar. The final row is "now", so implementations
-    should only use information available at that point in time. This singular
-    bar-by-bar interface helps prevent look-ahead bias by avoiding full-series
-    signal generation inside strategies.
+    Stage 7 optimizes the earlier sliced-DataFrame interface. ``data`` is now
+    the full OHLCV DataFrame and ``current_index`` marks the current bar.
+    Strategy implementations must not inspect rows after ``current_index``.
+    This removes per-bar DataFrame copies, but shifts look-ahead prevention
+    from structural enforcement to a documented strategy contract.
     """
 
     @property
@@ -30,7 +30,15 @@ class Strategy(ABC):
         """Human-readable strategy name."""
         ...
 
+    def precompute(self, data: pd.DataFrame) -> None:
+        """Precompute any indicators needed during the hot backtest loop."""
+
     @abstractmethod
-    def generate_signal(self, data: pd.DataFrame) -> Signal:
-        """Return exactly one signal for the current bar."""
+    def generate_signal(self, data: pd.DataFrame, current_index: int) -> Signal:
+        """Return exactly one signal for ``current_index``.
+
+        ``data`` is the full DataFrame for performance. Implementations must
+        only use values at indices ``<= current_index`` to avoid look-ahead
+        bias.
+        """
         ...
