@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Event-driven strategy backtesting engine."
 requires-python = ">=3.11"
 dependencies = [
+    "matplotlib",
     "numpy",
     "pandas",
     "pyarrow",
@@ -12,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "matplotlib",
     "mypy",
     "pandas-stubs",
     "pytest",
