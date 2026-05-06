@@ -1,9 +1,13 @@
+fastapi
+httpx
 matplotlib
 numpy
 pandas
 pandas-stubs
+pydantic
 pyarrow
 pytest
 pytest-cov
 mypy
+uvicorn
 yfinance

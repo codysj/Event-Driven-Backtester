@@ -194,6 +194,36 @@ python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023
 
 The CLI uses live/cached `DataLoader` data. The example scripts use synthetic data where possible so they are safer for offline demos.
 
+## Web Dashboard
+
+`Backtest Lab` is a local web dashboard for running a single-asset backtest from the browser and viewing results visually. It uses a FastAPI backend wrapper around the Python engine and a Next.js/TypeScript frontend with Recharts.
+
+Start the backend:
+
+```bash
+python -m uvicorn backtester.api.main:app --reload
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+By default, the frontend calls `http://localhost:8000`. To override it, copy `frontend/.env.example` to `frontend/.env.local` and edit `NEXT_PUBLIC_API_URL`.
+
+Typical workflow:
+
+1. Start the FastAPI backend.
+2. Start the Next.js frontend.
+3. Open `http://localhost:3000`.
+4. Choose a ticker, date range, strategy, sizing method, and benchmark option.
+5. Run the backtest and review summary cards, equity curve, drawdown, and trades.
+
+The web dashboard is a research/demo interface. It is not a brokerage app and does not place live trades. yfinance may require network access unless data is already cached.
+
 ## Tech Stack
 
 - Python 3.11+
@@ -202,5 +232,10 @@ The CLI uses live/cached `DataLoader` data. The example scripts use synthetic da
 - yfinance
 - pyarrow
 - matplotlib
+- FastAPI
+- Next.js
+- TypeScript
+- Tailwind CSS
+- Recharts
 - pytest
 - mypy

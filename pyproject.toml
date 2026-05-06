@@ -4,10 +4,14 @@ version = "0.1.0"
 description = "Event-driven strategy backtesting engine."
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi",
+    "httpx",
     "matplotlib",
     "numpy",
     "pandas",
+    "pydantic",
     "pyarrow",
+    "uvicorn",
     "yfinance",
 ]
 
