@@ -4,9 +4,11 @@ Durable instructions for Codex and other coding agents working in this repo.
 
 ## Project Snapshot
 
-- Backtester is a Python 3.11+ event-driven strategy backtesting engine with a FastAPI wrapper and a Next.js dashboard.
+- Backtester is a Python 3.11+ event-driven strategy backtesting engine with a FastAPI wrapper and a Next.js dashboard called Backtest Lab.
 - Core Python package is in `backtester/`; frontend source is isolated in `frontend/`.
 - The engine supports single-asset and multi-asset backtests, pluggable strategies, portfolio simulation, metrics, grid search, charts, CLI, and API responses.
+- FastAPI currently exposes health, strategy metadata, and single-asset backtest endpoints.
+- Backtest Lab currently exposes a polished single-asset research dashboard. Multi-asset support remains Python-side.
 - The project intentionally avoids backtesting-specific libraries such as backtrader, zipline, quantstats, and empyrical.
 - Core tests should remain deterministic and should not depend on live yfinance/network calls.
 
@@ -20,11 +22,15 @@ python -m pip install -r requirements.txt
 
 Python validation:
 
-```bash
-pytest
-mypy backtester
-pytest --cov=backtester
+```powershell
+python -m pytest
+python -m mypy backtester
+python -m pytest --cov=backtester
 ```
+
+Important:
+- Do not run bare `pytest` or `mypy` commands.
+- Always invoke them through `python -m ...` because PATH is not reliable in this environment.
 
 API:
 
@@ -41,46 +47,81 @@ npm run dev
 npm run build
 ```
 
+There is currently no `npm run lint` or `npm run typecheck` script. For frontend changes, `npm run build` is the available build/type validity gate.
+
 CLI/examples:
 
 ```bash
 python -m backtester.cli --help
+python -m backtester.cli run --ticker AAPL --strategy momentum --start 2020-01-01 --end 2023-12-31 --benchmark
+python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023-12-31 --fast-windows 5,10 --slow-windows 30,50
 python examples/run_demo.py
 python examples/grid_search_demo.py
 python examples/multi_asset_demo.py
 ```
 
-## Conventions
+## Architecture Boundaries
 
-- Keep architecture boundaries clean: `data`, `strategy`, `portfolio`, `metrics`, and `viz` should stay independently testable; `engine` and `api` compose modules.
-- Preserve existing public APIs unless the user explicitly asks for a breaking change.
-- Maintain strict typing for public Python functions/classes; `mypy backtester` should pass.
-- Use synthetic data in tests unless testing the data loader itself with mocked yfinance.
-- Frontend business logic should call the API, not reimplement backtesting logic.
-- Avoid unnecessary dependencies and heavy UI libraries; prefer the current stack unless there is a clear reason.
-- Do not rewrite large areas opportunistically; make small, well-scoped changes.
+- Keep `data`, `strategy`, `portfolio`, `metrics`, and `viz` independently testable.
+- `engine` composes data, strategy, portfolio, and config.
+- `api` composes schemas, service conversion, engine execution, and JSON responses.
+- `frontend` is an API client and presentation layer. It must not reimplement backtesting, portfolio accounting, benchmark math, or performance metrics in TypeScript.
+- Preserve public APIs unless the user explicitly asks for a breaking change.
+- Prefer small, well-scoped changes over broad rewrites.
+
+## Backend And API Conventions
+
+- Keep strict typing for public Python functions/classes; `mypy backtester` should pass.
+- Pydantic schemas in `backtester/api/schemas.py` are the API contract for Backtest Lab.
+- `backtester/api/services.py` should convert API requests into engine configs and convert engine results back to JSON-friendly responses.
+- Do not add auth, database persistence, live trading, broker integration, or paid data feeds unless explicitly requested.
+- If API tests need data, use FastAPI `TestClient` and monkeypatch service/loader behavior to avoid network calls.
+- yfinance-backed flows may be used in demos and manual local runs, but deterministic tests should use synthetic data or mocked yfinance/data loader behavior.
+
+## Frontend Conventions
+
+- Current stack: Next.js App Router, TypeScript, Tailwind CSS, Recharts, lucide-react.
+- Avoid heavy UI libraries or state managers unless there is a clear, user-requested reason.
+- Keep API calls isolated in `frontend/lib/api.ts`.
+- Keep API request/response shapes typed in `frontend/lib/types.ts`.
+- Use shared formatting helpers for currency, percentages, numbers, decimals, and dates.
+- Keep validation user-friendly and inline; do not rely on `alert()`.
+- Default `NEXT_PUBLIC_API_URL` behavior should remain `http://localhost:8000` unless explicitly changed.
+- Backtest Lab should remain desktop-first but usable on smaller screens without horizontal overflow.
+- Numbers in metric cards, tables, percentages, dates, and chart tooltips should use the finance mono font stack.
+- Do not add fake multi-page workflows or unsupported multi-asset UI. Disabled or coming-soon affordances are fine when honest.
 
 ## Testing Expectations
 
-- Add/update tests for behavior changes.
-- For API tests, use FastAPI `TestClient` and monkeypatch service calls when avoiding network/data dependencies.
-- For frontend changes, run `npm run build`; there is currently no configured frontend lint script.
-- If a command fails because dependencies or network are unavailable, document that in the handoff instead of hiding it.
+- Add or update tests for behavior changes.
+- For Python changes, run:
+  - `pytest`
+  - `mypy backtester`
+- For frontend changes, run:
+  - `cd frontend && npm run build`
+- If lint/typecheck scripts are added later, run them for frontend changes.
+- If a command fails because dependencies, PATH, network, or local services are unavailable, document that clearly in the handoff.
 
 ## Where To Look
 
 - `README.md` for user-facing overview and run commands.
-- `docs/architecture.md` for module map and data flow.
+- `docs/architecture.md` for module map, data flow, and integration notes.
 - `docs/current-state.md` for current implementation state and verified commands.
 - `docs/tasks.md` for lightweight task tracking.
 - `docs/decisions/README.md` for ADR guidance.
+- `frontend/README.md` for Backtest Lab-specific setup and component map.
+- `backtester/api/` for API contract and service conversion.
+- `frontend/app/`, `frontend/components/`, and `frontend/lib/` for dashboard implementation.
 
 ## Common Pitfalls
 
 - Stage 7 strategy API uses full DataFrames plus `current_index`; strategies must not read rows after `current_index`.
 - Multi-asset engine aligns tickers on the intersection of available dates and processes signals in config ticker order.
 - The web dashboard currently exposes single-asset backtests only; multi-asset remains Python-side.
+- FastAPI currently exposes only single-asset backtesting.
+- The frontend must call the API and render returned data; do not duplicate metrics or engine behavior in TypeScript.
 - yfinance calls may require network unless data is cached.
+- API CORS currently allows localhost/127.0.0.1 port 3000. Other dev ports may need CORS adjustment.
 - Generated files such as `__pycache__/`, `.pytest_cache/`, `.mypy_cache/`, `frontend/node_modules/`, and `frontend/.next/` should not be committed.
 
 ## Handoff
@@ -90,5 +131,6 @@ At the end of a session, report:
 - Files changed.
 - Commands run and results.
 - Tests or builds not run, with reasons.
-- Any assumptions, known limitations, or follow-up tasks added to `docs/tasks.md`.
+- API assumptions made.
+- Any known limitations or follow-up tasks added to `docs/tasks.md`.
 

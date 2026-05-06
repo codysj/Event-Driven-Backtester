@@ -50,3 +50,6 @@ What gets better, what gets worse, and what follow-up work may be needed?
 - Recharts chosen for v1 dashboard charts.
 - No backtesting-specific third-party libraries.
 
+## Index
+
+- [2026-05-06 - Backtest Lab remains an API client](2026-05-06-backtest-lab-api-client.md)

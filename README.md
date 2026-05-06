@@ -1,48 +1,180 @@
 # Backtester
 
-Backtester is an event-driven Python backtesting engine for running pluggable trading strategies over OHLCV data.
+Backtester is an event-driven Python backtesting engine for researching trading strategies over historical OHLCV data. It includes a FastAPI wrapper and a polished Next.js dashboard called **Backtest Lab** for running single-asset simulations from the browser.
+
+The project is built as a portfolio-quality demonstration of backtesting architecture, API integration, and financial dashboard UX. It is a research tool only, not a brokerage app or investment advisor.
 
 ## Built From Scratch
 
-No backtesting libraries are used. The data loading, strategy interface, portfolio simulation, performance metrics, visualization, and engine loop are implemented from first principles with general-purpose Python tools.
+Backtester intentionally avoids backtesting-specific libraries such as backtrader, zipline, quantstats, and empyrical. Data loading, strategy interfaces, portfolio simulation, performance metrics, benchmark comparison, visualization, and engine loops are implemented from first principles with general-purpose Python tools.
 
-## Features
+## Current Features
 
-- Event-driven bar-by-bar simulation
-- Pluggable `Strategy` abstract base class
-- Multi-asset backtesting via aligned shared trading dates
-- Historical OHLCV loading with yfinance and Parquet caching
-- Portfolio simulation with per-share commission and basis-point slippage
-- Fixed quantity, fixed dollar, all-in, percent-equity, and simplified volatility-target sizing
-- Performance metrics from scratch
-- Buy-and-hold benchmark comparison with alpha, beta, excess returns, and information ratio
-- Trade-level round-trip analytics
-- Static matplotlib visualization charts
-- Grid search for strategy parameter sweeps
-- CLI for backtests and grid searches
-- Benchmark and cProfile scripts
-- pytest, mypy, and GitHub Actions CI
+- Event-driven bar-by-bar simulation.
+- Pluggable strategy interfaces for single-asset and multi-asset workflows.
+- Built-in Momentum SMA Crossover and Mean Reversion strategies.
+- Historical OHLCV loading with yfinance and Parquet caching.
+- Portfolio simulation with cash, positions, trades, commissions, slippage, and equity curves.
+- Position sizing methods:
+  - Fixed quantity
+  - Fixed dollar
+  - All-in
+  - Percent equity
+  - Simplified volatility targeting
+- Performance metrics from scratch:
+  - Total and annualized return
+  - Sharpe and Sortino ratios
+  - Max drawdown
+  - Win rate and profit factor
+  - Alpha, beta, excess return, and information ratio when a benchmark is supplied
+- Buy-and-hold benchmark equity generation.
+- Trade-level analytics.
+- Single-asset grid search.
+- Matplotlib chart helpers.
+- CLI commands for single-asset backtests and grid searches.
+- FastAPI API for local app integration.
+- Backtest Lab dashboard built with Next.js, TypeScript, Tailwind CSS, and Recharts.
+- pytest and mypy validation through Python CI.
 
-## Architecture
+## Project Layout
 
 ```text
-backtester/
-├── backtester/
-│   ├── data/
-│   ├── strategy/
-│   ├── portfolio/
-│   ├── engine/
-│   ├── metrics/
-│   └── viz/
-├── benchmarks/
-├── docs/
-├── examples/
-└── tests/
+Backtester/
+|-- backtester/
+|   |-- api/
+|   |-- data/
+|   |-- engine/
+|   |-- metrics/
+|   |-- portfolio/
+|   |-- research/
+|   |-- strategy/
+|   `-- viz/
+|-- benchmarks/
+|-- docs/
+|-- examples/
+|-- frontend/
+|   |-- app/
+|   |-- components/
+|   `-- lib/
+|-- tests/
+|-- pyproject.toml
+`-- requirements.txt
 ```
 
-The data, strategy, portfolio, metrics, and visualization modules stay independent. The engine is the composition layer that wires a `DataLoader`, `Strategy`, `Portfolio`, and `BacktestConfig` together.
-
 ## Quick Start
+
+Install Python dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Run Python validation:
+
+```bash
+pytest
+mypy backtester
+pytest --cov=backtester
+```
+
+Start the FastAPI backend:
+
+```bash
+python -m uvicorn backtester.api.main:app --reload
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Build the frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
+There is currently no configured frontend lint or standalone typecheck script. `npm run build` performs the Next.js production build and TypeScript validity check.
+
+## Backtest Lab Dashboard
+
+**Backtest Lab** is the local browser interface for single-asset research. It is designed as a compact dark-mode financial research workstation rather than a toy demo.
+
+Current dashboard capabilities:
+
+- Full-screen app shell with sidebar navigation, compact run context header, and sticky configuration panel.
+- API health indicator based on `GET /health`.
+- Strategy metadata loaded from `GET /api/strategies`, with local fallbacks for offline form rendering.
+- Single-asset backtest form for:
+  - Ticker
+  - Start and end dates
+  - Strategy selection
+  - Momentum and mean-reversion parameters
+  - Initial cash
+  - Position sizing method and value
+  - Commission
+  - Slippage in basis points
+  - Buy-and-hold benchmark toggle
+- Inline validation for ticker, date range, cash, costs, sizing, and strategy parameters.
+- Run status, loading skeletons, empty state, and actionable API/error state.
+- KPI cards for total return, annualized return, Sharpe, Sortino, max drawdown, final value, total trades, and win rate.
+- Equity chart with optional benchmark line.
+- Drawdown chart with percent axis and negative drawdown display.
+- Tabs for Summary, Trades, Metrics, and Parameters.
+- Reproducibility view showing the submitted config and strategy parameters.
+- Research disclaimer: not investment advice.
+
+The frontend does not implement backtesting logic in TypeScript. It submits requests to FastAPI and renders the returned metrics, series, trades, and config.
+
+## API
+
+FastAPI app: `backtester/api/main.py`
+
+Endpoints:
+
+- `GET /health`
+  - Returns API status.
+- `GET /api/strategies`
+  - Returns strategy ids, labels, descriptions, and parameter metadata for the frontend form.
+- `POST /api/backtest`
+  - Runs a single-asset backtest through the Python engine.
+  - Request fields include ticker, date range, strategy, initial cash, commission, slippage, sizing method/value, benchmark toggle, and strategy parameters.
+  - Response includes config, summary metrics, equity/benchmark/drawdown/price series, and executed trades.
+
+By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## Local API + Frontend Workflow
+
+1. Start the API from the repo root:
+
+   ```bash
+   python -m uvicorn backtester.api.main:app --reload
+   ```
+
+2. In a second terminal, start the frontend:
+
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Open `http://localhost:3000`.
+4. Use the default AAPL Momentum SMA setup or adjust the config.
+5. Run the backtest and inspect equity, drawdown, trades, metrics, and parameters.
+
+yfinance may require network access unless the requested data is already cached.
+
+## Python Usage
+
+Single-asset example:
 
 ```python
 from backtester.data.loader import DataLoader
@@ -61,181 +193,98 @@ result = engine.run()
 print_report(generate_report(result))
 ```
 
-## Multi-Asset Backtesting
-
-Multi-asset runs use `MultiAssetBacktestConfig`, `MultiAssetBacktestEngine`, and a `MultiAssetStrategy`. The engine loads each ticker independently and aligns data on the intersection of available dates. This keeps one shared `current_index` and avoids forward-filling whole missing market sessions.
+Multi-asset example:
 
 ```python
 from backtester.data.loader import DataLoader
 from backtester.engine import MultiAssetBacktestConfig, MultiAssetBacktestEngine
 from backtester.strategy import MomentumStrategy, SingleStrategyMultiAssetWrapper
 
-config = MultiAssetBacktestConfig(tickers=["AAPL", "MSFT", "GOOG"], start_date="2020-01-01", end_date="2023-12-31")
+config = MultiAssetBacktestConfig(
+    tickers=["AAPL", "MSFT", "GOOG"],
+    start_date="2020-01-01",
+    end_date="2023-12-31",
+)
 strategy = SingleStrategyMultiAssetWrapper(lambda: MomentumStrategy(10, 50))
 result = MultiAssetBacktestEngine(DataLoader(), strategy, config).run()
 ```
 
-Signals are processed in config ticker order. In multi-asset `ALL_IN` mode, each BUY uses currently available cash when that ticker is processed.
+Multi-asset support is available in the Python engine. It is not currently exposed in the FastAPI endpoint, CLI, or Backtest Lab UI.
 
-## Grid Search
+## CLI
 
-Parameter sweeps live in `backtester.research`:
-
-```python
-from backtester.research import run_grid_search
-from backtester.strategy import MomentumStrategy
-
-results = run_grid_search(
-    loader=DataLoader(),
-    strategy_factory=MomentumStrategy,
-    param_grid={"fast_window": [5, 10], "slow_window": [30, 50]},
-    config=config,
-)
-print(results)
+```bash
+python -m backtester.cli --help
+python -m backtester.cli run --ticker AAPL --strategy momentum --start 2020-01-01 --end 2023-12-31 --benchmark
+python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023-12-31 --fast-windows 5,10 --slow-windows 30,50
 ```
 
-Invalid combinations are recorded in an `error` column so one bad parameter set does not stop the whole sweep.
+The CLI uses live/cached `DataLoader` data. Example scripts use synthetic data where practical to avoid network surprises.
 
 ## Strategies
 
-`MomentumStrategy` uses fast and slow simple moving averages on close prices. It buys when the fast SMA crosses above the slow SMA and sells when it crosses below.
+- `MomentumStrategy`
+  - Uses fast and slow simple moving averages on close prices.
+  - Buys when the fast SMA crosses above the slow SMA.
+  - Sells when the fast SMA crosses below the slow SMA.
+- `MeanReversionStrategy`
+  - Uses Bollinger-style bands around a rolling mean.
+  - Buys when price is at or below the lower band.
+  - Sells when price is at or above the upper band.
+- `SingleStrategyMultiAssetWrapper`
+  - Applies a single-asset strategy factory across multiple tickers for Python-side multi-asset runs.
 
-`MeanReversionStrategy` uses Bollinger-style bands around a rolling mean. It buys when price is at or below the lower band and sells when price is at or above the upper band.
+## Visualization And Screenshots
 
-Both strategies implement the same `Strategy` interface and are interchangeable in the engine.
-
-## Performance Metrics
-
-Implemented metrics:
-
-- Total return
-- Annualized return
-- Sharpe ratio
-- Sortino ratio
-- Max drawdown
-- Win rate
-- Profit factor
-- Alpha and beta
-- Information ratio
-- Excess returns
-- Trade summary analytics
-
-## Benchmarking
-
-`buy_and_hold_equity` creates a simple benchmark curve by buying as many shares as possible at the first close and holding. `generate_report(..., benchmark_equity=benchmark)` adds benchmark total return, excess total return, alpha, beta, and information ratio.
-
-## Visualization
-
-Chart helpers live in `backtester.viz`:
+Matplotlib helpers live in `backtester/viz/`:
 
 - `plot_equity_curve`
 - `plot_drawdown`
 - `plot_trades`
 - `plot_strategy_comparison`
 
-Generate example PNGs with:
+Generate example chart PNGs:
 
 ```bash
 python examples/generate_charts.py
 ```
 
-If generated, example charts are written to `docs/equity_curve.png`, `docs/drawdown.png`, `docs/trades.png`, and `docs/comparison.png`.
+Backtest Lab screenshot assets are not currently committed. To add portfolio screenshots, start the API and frontend, run the default AAPL backtest, and capture the dashboard at desktop width. Keep generated screenshots small and intentional.
 
-![Equity curve](docs/equity_curve.png)
-![Drawdown](docs/drawdown.png)
-![Trades](docs/trades.png)
-![Strategy comparison](docs/comparison.png)
+## Testing And CI
 
-## Performance Optimization
+Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 
-The Stage 4 engine prevented look-ahead bias structurally by slicing `data.iloc[:i + 1]` before each strategy call. Stage 7 removes that expensive per-bar DataFrame copy.
+- Install Python 3.11 dependencies from `requirements.txt`.
+- Run `pytest`.
+- Run `mypy backtester`.
 
-The optimized interface passes the full DataFrame plus `current_index`:
+Frontend CI is not currently configured. Run `cd frontend && npm run build` locally for dashboard changes.
 
-```python
-strategy.generate_signal(data, current_index=i)
-```
+## Known Limitations
 
-This improves speed by allowing:
-
-- Precomputed rolling indicators
-- Full-DataFrame strategy access without repeated slicing
-- NumPy close-price access in the engine hot loop
-
-The tradeoff is important: look-ahead prevention is now a strategy contract. Strategies must never read rows after `current_index`. Built-in strategies are tested against slow sliced-reference implementations to guard this behavior.
-
-Benchmark instructions and current result table live in [docs/benchmark_results.md](docs/benchmark_results.md). No fake benchmark numbers are included.
-
-## Testing
-
-```bash
-pytest
-pytest --cov=backtester
-mypy backtester
-```
-
-## Examples
-
-```bash
-python examples/run_demo.py
-python examples/simple_momentum.py
-python examples/compare_strategies.py
-python examples/generate_charts.py
-python examples/grid_search_demo.py
-python examples/multi_asset_demo.py
-```
-
-## CLI
-
-```bash
-python -m backtester.cli run --ticker AAPL --strategy momentum --start 2020-01-01 --end 2023-12-31 --benchmark
-python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023-12-31 --fast-windows 5,10 --slow-windows 30,50
-```
-
-The CLI uses live/cached `DataLoader` data. The example scripts use synthetic data where possible so they are safer for offline demos.
-
-## Web Dashboard
-
-`Backtest Lab` is a local web dashboard for running a single-asset backtest from the browser and viewing results visually. It uses a FastAPI backend wrapper around the Python engine and a Next.js/TypeScript frontend with Recharts.
-
-Start the backend:
-
-```bash
-python -m uvicorn backtester.api.main:app --reload
-```
-
-Start the frontend:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-By default, the frontend calls `http://localhost:8000`. To override it, copy `frontend/.env.example` to `frontend/.env.local` and edit `NEXT_PUBLIC_API_URL`.
-
-Typical workflow:
-
-1. Start the FastAPI backend.
-2. Start the Next.js frontend.
-3. Open `http://localhost:3000`.
-4. Choose a ticker, date range, strategy, sizing method, and benchmark option.
-5. Run the backtest and review summary cards, equity curve, drawdown, and trades.
-
-The web dashboard is a research/demo interface. It is not a brokerage app and does not place live trades. yfinance may require network access unless data is already cached.
+- Backtest Lab and `POST /api/backtest` currently support single-asset backtests only.
+- The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
+- No authentication.
+- No database or saved run persistence.
+- No broker integration.
+- No live trading or order placement.
+- No paid data feed integration.
+- yfinance-backed workflows may require network access unless data is cached.
+- Frontend has no lint script today.
+- Benchmark documentation still lacks a measured pre-optimization baseline comparison.
 
 ## Tech Stack
 
 - Python 3.11+
-- pandas
-- numpy
-- yfinance
-- pyarrow
+- pandas, numpy
+- yfinance, pyarrow
+- FastAPI, Pydantic, Uvicorn
 - matplotlib
-- FastAPI
-- Next.js
-- TypeScript
+- pytest, pytest-cov, mypy
+- Next.js App Router
+- React, TypeScript
 - Tailwind CSS
 - Recharts
-- pytest
-- mypy
+- lucide-react
+
