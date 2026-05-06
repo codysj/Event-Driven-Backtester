@@ -32,3 +32,6 @@ ignore_missing_imports = true
 module = ["tests.*"]
 disallow_untyped_decorators = false
 
+[project.scripts]
+backtester = "backtester.cli:main"
+

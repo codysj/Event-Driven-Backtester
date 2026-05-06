@@ -9,7 +9,8 @@ from typing import cast
 import pandas as pd
 
 from backtester.data.loader import DataLoader
-from backtester.engine.config import BacktestConfig, PositionSizeMethod
+from backtester.engine.config import BacktestConfig
+from backtester.engine.sizing import calculate_buy_quantity
 from backtester.portfolio import Order, Portfolio, Side, Trade
 from backtester.strategy import Signal, Strategy
 
@@ -67,6 +68,8 @@ class BacktestEngine:
                 timestamp,
                 current_price,
                 portfolio,
+                data,
+                i,
             )
             if order is not None:
                 portfolio.execute_order(
@@ -94,12 +97,22 @@ class BacktestEngine:
         timestamp: datetime,
         current_price: float,
         portfolio: Portfolio,
+        data: pd.DataFrame,
+        current_index: int,
     ) -> Order | None:
         if signal is Signal.HOLD:
             return None
 
         if signal is Signal.BUY:
-            quantity = self._calculate_buy_quantity(current_price, portfolio.cash)
+            portfolio_value = portfolio.total_value({ticker: current_price})
+            quantity = calculate_buy_quantity(
+                config=self._config,
+                price=current_price,
+                available_cash=portfolio.cash,
+                portfolio_value=portfolio_value,
+                data=data,
+                current_index=current_index,
+            )
             if quantity <= 0:
                 return None
             return Order(ticker=ticker, side=Side.BUY, quantity=quantity, timestamp=timestamp)
@@ -108,13 +121,3 @@ class BacktestEngine:
         if position is None:
             return None
         return Order(ticker=ticker, side=Side.SELL, quantity=position.quantity, timestamp=timestamp)
-
-    def _calculate_buy_quantity(self, price: float, available_cash: float) -> int:
-        if price <= 0:
-            return 0
-
-        if self._config.position_size_method is PositionSizeMethod.ALL_IN:
-            return int(available_cash // price)
-        if self._config.position_size_method is PositionSizeMethod.FIXED_DOLLAR:
-            return int(self._config.position_size_value // price)
-        return int(self._config.position_size_value)

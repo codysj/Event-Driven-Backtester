@@ -42,3 +42,31 @@ class Strategy(ABC):
         bias.
         """
         ...
+
+
+class MultiAssetStrategy(ABC):
+    """Abstract interface for strategies that emit signals for many tickers.
+
+    ``data`` maps ticker symbols to aligned OHLCV DataFrames. The engine passes
+    full DataFrames for speed, and ``current_index`` marks the current shared
+    bar. Implementations must only use rows at indices ``<= current_index``.
+    Missing tickers in the returned mapping are treated as HOLD by the engine.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Human-readable strategy name."""
+        ...
+
+    def precompute(self, data: dict[str, pd.DataFrame]) -> None:
+        """Precompute any indicators needed for all ticker DataFrames."""
+
+    @abstractmethod
+    def generate_signals(
+        self,
+        data: dict[str, pd.DataFrame],
+        current_index: int,
+    ) -> dict[str, Signal]:
+        """Return ticker-to-signal mapping for ``current_index``."""
+        ...

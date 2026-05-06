@@ -24,12 +24,12 @@ python benchmarks/profile_backtest.py
 
 The original sliced-DataFrame baseline must be measured from a pre-Stage-7 commit or reconstructed branch. The current optimized implementation uses full DataFrame access with `current_index`, precomputed strategy indicators, and NumPy close-price access in the engine loop.
 
-Measured locally on Windows with Python 3.14.0, synthetic 2,500-bar OHLCV data, `MomentumStrategy(10/50)`, zero commission, and zero slippage:
+Latest measured local run on Windows with Python 3.14.0, synthetic 2,500-bar OHLCV data, `MomentumStrategy(10/50)`, zero commission, and zero slippage:
 
 | Version | Time | Throughput | Speedup |
 |---------|------|------------|---------|
 | Baseline sliced DataFrame | TODO: measure from pre-optimization commit | TODO | 1.0x |
-| Precomputed indicators + NumPy hot loop | 0.008092 s | 308,943.29 bars/sec | TODO: compare to baseline |
+| Precomputed indicators + NumPy hot loop | 0.019221 s | 130,064.72 bars/sec | TODO: compare to baseline |
 
 Latest cProfile synthetic run:
 

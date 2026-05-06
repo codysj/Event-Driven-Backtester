@@ -10,10 +10,16 @@ No backtesting libraries are used. The data loading, strategy interface, portfol
 
 - Event-driven bar-by-bar simulation
 - Pluggable `Strategy` abstract base class
+- Multi-asset backtesting via aligned shared trading dates
 - Historical OHLCV loading with yfinance and Parquet caching
 - Portfolio simulation with per-share commission and basis-point slippage
+- Fixed quantity, fixed dollar, all-in, percent-equity, and simplified volatility-target sizing
 - Performance metrics from scratch
+- Buy-and-hold benchmark comparison with alpha, beta, excess returns, and information ratio
+- Trade-level round-trip analytics
 - Static matplotlib visualization charts
+- Grid search for strategy parameter sweeps
+- CLI for backtests and grid searches
 - Benchmark and cProfile scripts
 - pytest, mypy, and GitHub Actions CI
 
@@ -55,6 +61,41 @@ result = engine.run()
 print_report(generate_report(result))
 ```
 
+## Multi-Asset Backtesting
+
+Multi-asset runs use `MultiAssetBacktestConfig`, `MultiAssetBacktestEngine`, and a `MultiAssetStrategy`. The engine loads each ticker independently and aligns data on the intersection of available dates. This keeps one shared `current_index` and avoids forward-filling whole missing market sessions.
+
+```python
+from backtester.data.loader import DataLoader
+from backtester.engine import MultiAssetBacktestConfig, MultiAssetBacktestEngine
+from backtester.strategy import MomentumStrategy, SingleStrategyMultiAssetWrapper
+
+config = MultiAssetBacktestConfig(tickers=["AAPL", "MSFT", "GOOG"], start_date="2020-01-01", end_date="2023-12-31")
+strategy = SingleStrategyMultiAssetWrapper(lambda: MomentumStrategy(10, 50))
+result = MultiAssetBacktestEngine(DataLoader(), strategy, config).run()
+```
+
+Signals are processed in config ticker order. In multi-asset `ALL_IN` mode, each BUY uses currently available cash when that ticker is processed.
+
+## Grid Search
+
+Parameter sweeps live in `backtester.research`:
+
+```python
+from backtester.research import run_grid_search
+from backtester.strategy import MomentumStrategy
+
+results = run_grid_search(
+    loader=DataLoader(),
+    strategy_factory=MomentumStrategy,
+    param_grid={"fast_window": [5, 10], "slow_window": [30, 50]},
+    config=config,
+)
+print(results)
+```
+
+Invalid combinations are recorded in an `error` column so one bad parameter set does not stop the whole sweep.
+
 ## Strategies
 
 `MomentumStrategy` uses fast and slow simple moving averages on close prices. It buys when the fast SMA crosses above the slow SMA and sells when it crosses below.
@@ -74,6 +115,14 @@ Implemented metrics:
 - Max drawdown
 - Win rate
 - Profit factor
+- Alpha and beta
+- Information ratio
+- Excess returns
+- Trade summary analytics
+
+## Benchmarking
+
+`buy_and_hold_equity` creates a simple benchmark curve by buying as many shares as possible at the first close and holding. `generate_report(..., benchmark_equity=benchmark)` adds benchmark total return, excess total return, alpha, beta, and information ratio.
 
 ## Visualization
 
@@ -128,10 +177,22 @@ mypy backtester
 ## Examples
 
 ```bash
+python examples/run_demo.py
 python examples/simple_momentum.py
 python examples/compare_strategies.py
 python examples/generate_charts.py
+python examples/grid_search_demo.py
+python examples/multi_asset_demo.py
 ```
+
+## CLI
+
+```bash
+python -m backtester.cli run --ticker AAPL --strategy momentum --start 2020-01-01 --end 2023-12-31 --benchmark
+python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023-12-31 --fast-windows 5,10 --slow-windows 30,50
+```
+
+The CLI uses live/cached `DataLoader` data. The example scripts use synthetic data where possible so they are safer for offline demos.
 
 ## Tech Stack
 

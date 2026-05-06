@@ -1,0 +1,79 @@
+"""Grid-search utilities for strategy parameter research."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from itertools import product
+
+import pandas as pd
+
+from backtester.data.loader import DataLoader
+from backtester.engine import BacktestConfig, BacktestEngine
+from backtester.metrics import generate_report
+from backtester.strategy import Strategy
+
+
+@dataclass(frozen=True)
+class GridSearchResult:
+    """A single parameter-combination result row."""
+
+    params: dict[str, object]
+    final_value: float
+    total_return: float
+    sharpe_ratio: float
+    max_drawdown: float
+    total_trades: int
+    error: str
+
+
+def run_grid_search(
+    loader: DataLoader,
+    strategy_factory: Callable[..., Strategy],
+    param_grid: dict[str, Sequence[object]],
+    config: BacktestConfig,
+    risk_free_rate: float = 0.0,
+    sort_by: str = "sharpe_ratio",
+    ascending: bool = False,
+) -> pd.DataFrame:
+    """Run all parameter combinations and return a sorted result DataFrame."""
+    rows: list[dict[str, object]] = []
+    for params in _expand_grid(param_grid):
+        row: dict[str, object] = dict(params)
+        try:
+            strategy = strategy_factory(**params)
+            result = BacktestEngine(loader=loader, strategy=strategy, config=config).run()
+            report = generate_report(result, risk_free_rate=risk_free_rate)
+            row.update(
+                {
+                    "final_value": result.final_value,
+                    "total_return": report["total_return"],
+                    "sharpe_ratio": report["sharpe_ratio"],
+                    "max_drawdown": report["max_drawdown"],
+                    "total_trades": len(result.trades),
+                    "error": "",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - grid search records bad combinations.
+            row.update(
+                {
+                    "final_value": float("nan"),
+                    "total_return": float("nan"),
+                    "sharpe_ratio": float("nan"),
+                    "max_drawdown": float("nan"),
+                    "total_trades": 0,
+                    "error": str(exc),
+                }
+            )
+        rows.append(row)
+
+    result_frame = pd.DataFrame(rows)
+    if sort_by in result_frame.columns:
+        result_frame = result_frame.sort_values(sort_by, ascending=ascending, na_position="last")
+    return result_frame.reset_index(drop=True)
+
+
+def _expand_grid(param_grid: dict[str, Sequence[object]]) -> list[dict[str, object]]:
+    keys = list(param_grid)
+    values = [param_grid[key] for key in keys]
+    return [dict(zip(keys, combination, strict=True)) for combination in product(*values)]

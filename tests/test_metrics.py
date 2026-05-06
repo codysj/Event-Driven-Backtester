@@ -159,7 +159,7 @@ def test_generate_report_keys() -> None:
         "win_rate",
         "profit_factor",
         "total_trades",
+        "trade_summary",
     }
     assert report["strategy"] == "TestStrategy"
     assert report["total_trades"] == 2
-

@@ -8,6 +8,7 @@ import pandas as pd
 
 from backtester.engine.backtest import BacktestResult
 from backtester.portfolio.order import Side, Trade
+from backtester.metrics.trades import trade_summary
 
 
 def total_return(initial_value: float, final_value: float) -> float:
@@ -119,14 +120,102 @@ def profit_factor(trades: list[Trade]) -> float:
     return gross_profit / gross_loss
 
 
-def generate_report(result: BacktestResult, risk_free_rate: float = 0.0) -> dict[str, object]:
+def buy_and_hold_equity(
+    price_data: pd.DataFrame,
+    initial_cash: float,
+    price_column: str = "close",
+    commission_rate: float = 0.0,
+    slippage_bps: float = 0.0,
+) -> pd.Series:
+    """Return a simple buy-and-hold benchmark equity curve."""
+    if initial_cash <= 0:
+        msg = "initial_cash must be positive."
+        raise ValueError(msg)
+    if price_data.empty:
+        return pd.Series(index=price_data.index, dtype="float64", name="benchmark_equity")
+
+    first_close = float(price_data[price_column].iloc[0])
+    if first_close <= 0:
+        msg = "first benchmark price must be positive."
+        raise ValueError(msg)
+    entry_price = first_close * (1 + slippage_bps / 10_000)
+    max_quantity = int(initial_cash // entry_price)
+    commission = commission_rate * max_quantity
+    while max_quantity > 0 and max_quantity * entry_price + commission > initial_cash:
+        max_quantity -= 1
+        commission = commission_rate * max_quantity
+    remaining_cash = initial_cash - max_quantity * entry_price - commission
+    values = remaining_cash + max_quantity * price_data[price_column].astype(float)
+    return pd.Series(values.to_numpy(dtype=float), index=price_data.index, name="benchmark_equity")
+
+
+def excess_returns(strategy_equity: pd.Series, benchmark_equity: pd.Series) -> pd.Series:
+    """Return aligned strategy daily returns minus benchmark daily returns."""
+    aligned = pd.concat(
+        [strategy_equity.rename("strategy"), benchmark_equity.rename("benchmark")],
+        axis=1,
+        join="inner",
+    )
+    returns = aligned.pct_change().dropna()
+    excess = returns["strategy"] - returns["benchmark"]
+    return pd.Series(excess, index=excess.index, name="excess_returns")
+
+
+def alpha_beta(
+    strategy_returns: pd.Series,
+    benchmark_returns: pd.Series,
+    risk_free_rate: float = 0.0,
+) -> tuple[float, float]:
+    """Return annualized alpha and beta versus benchmark returns."""
+    aligned = pd.concat(
+        [strategy_returns.rename("strategy"), benchmark_returns.rename("benchmark")],
+        axis=1,
+        join="inner",
+    ).dropna()
+    if len(aligned) < 2:
+        return (0.0, 0.0)
+
+    daily_rf = risk_free_rate / 252
+    excess_strategy = aligned["strategy"] - daily_rf
+    excess_benchmark = aligned["benchmark"] - daily_rf
+    benchmark_variance = float(excess_benchmark.var())
+    if benchmark_variance == 0.0 or math.isnan(benchmark_variance):
+        return (0.0, 0.0)
+
+    beta = float(excess_strategy.cov(excess_benchmark) / benchmark_variance)
+    alpha_daily = float(excess_strategy.mean()) - beta * float(excess_benchmark.mean())
+    return (alpha_daily * 252, beta)
+
+
+def information_ratio(strategy_returns: pd.Series, benchmark_returns: pd.Series) -> float:
+    """Return annualized information ratio versus benchmark returns."""
+    aligned = pd.concat(
+        [strategy_returns.rename("strategy"), benchmark_returns.rename("benchmark")],
+        axis=1,
+        join="inner",
+    ).dropna()
+    if aligned.empty:
+        return 0.0
+    active_returns = aligned["strategy"] - aligned["benchmark"]
+    tracking_error = float(active_returns.std())
+    if tracking_error == 0.0 or math.isnan(tracking_error):
+        return 0.0
+    return float(active_returns.mean()) / tracking_error * math.sqrt(252)
+
+
+def generate_report(
+    result: BacktestResult,
+    risk_free_rate: float = 0.0,
+    benchmark_equity: pd.Series | None = None,
+) -> dict[str, object]:
     """Generate a stable dictionary of performance metrics for a backtest result."""
     returns = result.equity_curve.pct_change().dropna()
-    return {
+    total_return_value = total_return(result.initial_value, result.final_value)
+    report: dict[str, object] = {
         "strategy": result.strategy_name,
         "initial_value": result.initial_value,
         "final_value": result.final_value,
-        "total_return": total_return(result.initial_value, result.final_value),
+        "total_return": total_return_value,
         "annualized_return": annualized_return(result.equity_curve),
         "sharpe_ratio": sharpe_ratio(returns, risk_free_rate=risk_free_rate),
         "sortino_ratio": sortino_ratio(returns, risk_free_rate=risk_free_rate),
@@ -134,7 +223,22 @@ def generate_report(result: BacktestResult, risk_free_rate: float = 0.0) -> dict
         "win_rate": win_rate(result.trades),
         "profit_factor": profit_factor(result.trades),
         "total_trades": len(result.trades),
+        "trade_summary": trade_summary(result.trades),
     }
+    if benchmark_equity is not None:
+        benchmark_returns = benchmark_equity.pct_change().dropna()
+        alpha, beta = alpha_beta(returns, benchmark_returns, risk_free_rate=risk_free_rate)
+        benchmark_total = total_return(float(benchmark_equity.iloc[0]), float(benchmark_equity.iloc[-1])) if len(benchmark_equity) >= 2 else 0.0
+        report.update(
+            {
+                "benchmark_total_return": benchmark_total,
+                "excess_total_return": total_return_value - benchmark_total,
+                "alpha": alpha,
+                "beta": beta,
+                "information_ratio": information_ratio(returns, benchmark_returns),
+            }
+        )
+    return report
 
 
 def print_report(report: dict[str, object]) -> None:
