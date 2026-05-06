@@ -12,6 +12,8 @@ Install dependencies:
 npm install
 ```
 
+Backtest Lab currently uses Next.js 15. Use a Node.js version compatible with Next's engine range: `^18.18.0`, `^19.8.0`, or `>=20.0.0`.
+
 Run the development server:
 
 ```bash
@@ -25,6 +27,10 @@ npm run build
 ```
 
 There is currently no `npm run lint` or standalone `npm run typecheck` script. `npm run build` runs the Next.js production build and TypeScript validity checks.
+
+## Dependency Security
+
+The project pins a stable Next.js 15 release and uses an npm override for Next's nested PostCSS dependency so `npm audit` remains clean without jumping to Next 16. Do not replace this with `npm audit fix --force` unless a future audit leaves no safe non-force path.
 
 ## API Configuration
 
@@ -94,4 +100,3 @@ Backtest Lab assumes these API endpoints exist:
 - `POST /api/backtest`
 
 `POST /api/backtest` is single-asset. It returns submitted config, summary metrics, equity/benchmark/drawdown/price series, and trades. Multi-asset runs are supported in Python but not currently exposed to this frontend.
-

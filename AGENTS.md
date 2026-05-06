@@ -47,7 +47,7 @@ npm run dev
 npm run build
 ```
 
-There is currently no `npm run lint` or `npm run typecheck` script. For frontend changes, `npm run build` is the available build/type validity gate.
+Backtest Lab uses Next.js 15. Use a Node.js version compatible with Next's engine range: `^18.18.0`, `^19.8.0`, or `>=20.0.0`. There is currently no `npm run lint` or `npm run typecheck` script. For frontend changes, `npm run build` is the available build/type validity gate.
 
 CLI/examples:
 
@@ -82,6 +82,7 @@ python examples/multi_asset_demo.py
 
 - Current stack: Next.js App Router, TypeScript, Tailwind CSS, Recharts, lucide-react.
 - Avoid heavy UI libraries or state managers unless there is a clear, user-requested reason.
+- Preserve the npm override that keeps Next's nested PostCSS dependency on a patched 8.5.x release unless a future Next upgrade makes it unnecessary.
 - Keep API calls isolated in `frontend/lib/api.ts`.
 - Keep API request/response shapes typed in `frontend/lib/types.ts`.
 - Use shared formatting helpers for currency, percentages, numbers, decimals, and dates.
@@ -133,4 +134,3 @@ At the end of a session, report:
 - Tests or builds not run, with reasons.
 - API assumptions made.
 - Any known limitations or follow-up tasks added to `docs/tasks.md`.
-

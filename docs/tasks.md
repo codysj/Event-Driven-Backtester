@@ -5,7 +5,7 @@
 - Add frontend build to `.github/workflows/ci.yml` if Node build time is acceptable.
 - Add a frontend lint script and decide on ESLint rules.
 - Add an explicit frontend typecheck script if useful beyond `next build`.
-- Review npm audit findings from the frontend dependency tree.
+- Keep frontend dependency audit clean during future upgrades; do not remove the PostCSS override until it is no longer needed.
 - Decide whether generated chart/dashboard screenshots in `docs/` should be committed or regenerated on demand.
 - Consider making API CORS origins configurable for non-3000 frontend dev ports.
 
@@ -30,7 +30,5 @@
 
 - Should Backtest Lab stay single-asset for portfolio demo clarity, or should multi-asset be prioritized next?
 - Should CI run Node installation/build on every push?
-- Should npm audit warnings be addressed immediately or deferred until dependency versions settle?
 - Should examples default entirely to synthetic data to avoid network surprises?
 - Should generated docs PNGs and Backtest Lab screenshots be tracked in Git?
-

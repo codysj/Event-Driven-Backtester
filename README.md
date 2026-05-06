@@ -91,6 +91,8 @@ npm install
 npm run dev
 ```
 
+The frontend uses Next.js 15 and requires a compatible Node.js runtime (`^18.18.0`, `^19.8.0`, or `>=20.0.0`). The current local validation was run with Node 24.14.0 and npm 11.9.0.
+
 Build the frontend:
 
 ```bash
@@ -273,6 +275,7 @@ Frontend CI is not currently configured. Run `cd frontend && npm run build` loca
 - yfinance-backed workflows may require network access unless data is cached.
 - Frontend has no lint script today.
 - Benchmark documentation still lacks a measured pre-optimization baseline comparison.
+- The frontend uses an npm override to keep Next's nested PostCSS dependency on a patched 8.5.x release until Next publishes a stable line that no longer needs the override.
 
 ## Tech Stack
 
@@ -287,4 +290,3 @@ Frontend CI is not currently configured. Run `cd frontend && npm run build` loca
 - Tailwind CSS
 - Recharts
 - lucide-react
-
