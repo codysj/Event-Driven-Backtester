@@ -3,9 +3,11 @@
 ## Now
 
 - AI Strategy Builder backend skeleton added:
-  - `backtester/ai/` schemas, prompt template, provider abstraction, deterministic fake provider, validator, and placeholder compilers.
-  - `POST /api/ai/strategy-draft` returns inert, validated draft JSON.
-  - No real LLM calls, generated Python execution, frontend UI, persistence, broker integration, or live trading.
+  - `backtester/ai/` schemas, prompt template, provider abstraction/factory, deterministic fake provider, optional OpenAI-compatible provider, validator, and compilers.
+  - `POST /api/ai/strategy-draft` returns inert, validated draft JSON. Fake remains the default provider; real providers are server-side opt-in through env vars.
+  - `POST /api/ai/compile` compiles reviewed drafts into existing Backtest, Grid Search, and Walk-Forward request payloads.
+  - Backtest Lab AI Builder UI now drafts from prompts, previews assumptions/warnings/unsupported items, compiles drafts, and loads compiled configs into existing workflow forms.
+  - No generated Python execution, persistence, broker integration, live trading, frontend API-key handling, or committed secrets.
 
 The latest research-workstation batch added:
   - `POST /api/grid-search` with leaderboard rows, failed-combination preservation, heatmap data, and robustness warnings.
@@ -16,9 +18,6 @@ The latest research-workstation batch added:
 ## Next
 
 - Expose multi-asset backtesting through FastAPI if the dashboard roadmap needs it.
-- Compile reviewed AI strategy drafts into existing Backtest, Grid Search, and Walk-Forward request models.
-- Add Backtest Lab AI draft UI only after the backend compile contract exists.
-- Add a real `LLMProvider` implementation with deterministic mocked tests and no committed secrets.
 - Define a small typed rule DSL or strategy intent layer before expanding AI-generated strategy coverage.
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.
 - Add CLI support for multi-asset backtests.

@@ -56,27 +56,30 @@ Last documentation pass: 2026-05-07.
   - `GET /health`
   - `GET /api/strategies`
   - `POST /api/ai/strategy-draft`
+  - `POST /api/ai/compile`
   - `POST /api/backtest`
   - `POST /api/grid-search`
   - `POST /api/walk-forward`
   - Configurable CORS origins through `BACKTESTER_CORS_ORIGINS`
 - AI Strategy Builder backend foundation:
   - `backtester/ai/` package with strict Pydantic draft schemas.
-  - Future-facing prompt template that requires structured JSON and forbids executable code.
-  - `LLMProvider` protocol and deterministic `FakeStrategyDraftProvider`.
+  - Prompt template that requires structured JSON and forbids executable code.
+  - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, and optional OpenAI-compatible provider implementation.
+  - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, and timeout. No API key is exposed to the frontend.
   - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
-  - Placeholder compilers for future conversion into existing API request objects.
-  - API endpoint returns draft status, warnings, unsupported items, and validation errors without calling a real LLM.
+  - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads.
+  - API endpoints return draft/compile status, warnings, unsupported items, and validation errors without executing workflows. Fake remains the default provider, including tests.
 - Backtest Lab frontend:
   - Next.js 15 App Router, TypeScript, Tailwind CSS, Recharts.
   - Full-screen dark finance dashboard shell.
   - Sidebar, top run-context header, and sticky right configuration panel.
-  - Mode switcher for Single Run, Grid Search, and Walk-Forward workflows.
+  - Mode switcher for Single Run, Grid Search, Walk-Forward, and AI Builder workflows.
   - Single-asset backtest form with inline validation.
   - Grid-search form with strategy parameter ranges, optimization metric, benchmark toggle, and top-N control.
   - Grid-search leaderboard, best-row summary, robustness warnings, failed-combination display, two-parameter heatmap, CSV/config export, and selected-row handoff into a single run.
   - Walk-forward form with train/test/step windows and strategy parameter grids.
   - Walk-forward fold table, train/test metric comparison, degradation ratios, aggregate warnings, and parameter stability.
+  - AI Builder UI with natural-language prompt templates, draft generation through `POST /api/ai/strategy-draft`, readable strategy preview, assumptions/warnings/unsupported states, compile handoff through `POST /api/ai/compile`, and secondary reproducibility JSON.
   - API health indicator and strategy metadata loading.
   - Empty, loading, and error states.
   - KPI cards.
@@ -90,7 +93,7 @@ Last documentation pass: 2026-05-07.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- AI Strategy Builder is backend-only and fake-provider-only. It does not call a real LLM, compile drafts into runs, execute generated code, or modify the frontend.
+- AI Strategy Builder can optionally call a real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
@@ -121,9 +124,6 @@ Last documentation pass: 2026-05-07.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
 - Measure a pre-optimization baseline for `docs/benchmark_results.md`.
 - Keep the frontend dependency audit clean during future upgrades.
-- Compile reviewed AI drafts into existing backtest, grid-search, and walk-forward request schemas.
-- Add Backtest Lab UI for inspecting and editing AI strategy drafts after the backend compile contract exists.
-- Add a real provider behind the `LLMProvider` protocol with deterministic tests and no API keys committed.
 - Define a small rule DSL or typed strategy intent format before supporting strategies beyond momentum and mean reversion.
 
 ## Commands Verified During This Documentation Pass
@@ -142,6 +142,9 @@ Recent documented results:
 
 - `python -m pytest`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `python -m mypy backtester`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
+- `cmd /c npm run lint` from `frontend/`: success after adding the AI Builder UI.
+- `cmd /c npm run typecheck` from `frontend/`: success after adding the AI Builder UI. `next typegen` generated route types and `tsc --noEmit` passed.
+- `cmd /c npm run build` from `frontend/`: success after clearing a stale generated `.next` directory. Next.js 15.5.15 production build compiled successfully and generated 4 static pages.
 - `python -m pytest --cov=backtester`: not run successfully for the same reason; no Python launcher or local `venv` was available in this workspace.
 - `cmd /c npm run lint` from `frontend/`: success.
 - `cmd /c npm run typecheck` from `frontend/`: success. `next typegen` generated route types and `tsc --noEmit` passed.

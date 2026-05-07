@@ -63,6 +63,68 @@ export type WalkForwardRequest = ResearchBaseRequest & {
   step_bars: number;
 };
 
+export type AiTargetMode = "single_run" | "grid_search" | "walk_forward" | "unspecified";
+
+export type AiStrategyDraftStatus = "ready" | "needs_clarification" | "unsupported";
+
+export type AiStrategyKind = StrategyId | "unsupported";
+
+export type StrategyDraftRequest = {
+  prompt: string;
+  provider?: string | null;
+  model?: string | null;
+  current_config?: Record<string, unknown> | null;
+};
+
+export type StrategyDraft = {
+  target_mode: AiTargetMode;
+  ticker: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  benchmark: boolean;
+  initial_cash: number | null;
+  commission_rate: number | null;
+  slippage_bps: number | null;
+  position_size_method: PositionSizeMethod | null;
+  position_size_value: number | null;
+  strategy_kind: AiStrategyKind;
+  parameters: Record<string, number>;
+  parameter_grid: ParameterGrid | null;
+  optimization_metric: OptimizationMetric | null;
+  train_window_bars: number | null;
+  test_window_bars: number | null;
+  step_bars: number | null;
+  assumptions: string[];
+  warnings: string[];
+  unsupported: string[];
+  confidence: number | null;
+  status: AiStrategyDraftStatus;
+};
+
+export type StrategyDraftResponse = {
+  draft: StrategyDraft | null;
+  status: AiStrategyDraftStatus;
+  warnings: string[];
+  unsupported: string[];
+  validation_errors: string[];
+};
+
+export type StrategyCompileRequest = {
+  draft: StrategyDraft;
+};
+
+export type StrategyCompilePayload = BacktestRequest | GridSearchRequest | WalkForwardRequest;
+
+export type StrategyCompileResponse = {
+  target_mode: AiTargetMode;
+  status: AiStrategyDraftStatus;
+  payload: StrategyCompilePayload | null;
+  assumptions: string[];
+  warnings: string[];
+  unsupported: string[];
+  validation_errors: string[];
+};
+
 export type HealthResponse = {
   status: string;
 };

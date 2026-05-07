@@ -31,12 +31,12 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 - Trade-level analytics.
 - Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
 - Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
-- Backend skeleton for a safe AI Strategy Builder that turns natural-language prompts into inert, validated strategy drafts using a deterministic fake provider.
+- Safe AI Strategy Builder foundation that turns natural-language prompts into inert, validated strategy drafts and compiles them into existing API-compatible request payloads using a deterministic fake provider by default, with optional server-side OpenAI-compatible provider support.
 - Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
 - Matplotlib chart helpers.
 - CLI commands for single-asset backtests and grid searches.
 - FastAPI API for local app integration.
-- Backtest Lab dashboard built with Next.js, TypeScript, Tailwind CSS, and Recharts.
+- Backtest Lab dashboard built with Next.js, TypeScript, Tailwind CSS, and Recharts, including a natural-language AI Builder UI that drafts and compiles inert strategy configs through FastAPI.
 - pytest and mypy validation through Python CI.
 
 ## Project Layout
@@ -117,7 +117,7 @@ Current dashboard capabilities:
 - Full-screen app shell with sidebar navigation, compact run context header, and sticky configuration panel.
 - API health indicator based on `GET /health`.
 - Strategy metadata loaded from `GET /api/strategies`, with local fallbacks for offline form rendering.
-- Mode switcher for Single Run, Grid Search, and Walk-Forward workflows.
+- Mode switcher for Single Run, Grid Search, Walk-Forward, and AI Builder workflows.
 - Single-asset backtest form for:
   - Ticker
   - Start and end dates
@@ -141,6 +141,7 @@ Current dashboard capabilities:
 - Grid-search results with leaderboard, best row, robustness warnings, failed combinations, two-parameter heatmap, exports, and a "Run selected config" action that promotes a row into the single-run workflow.
 - Walk-forward form for train/test/step windows and strategy parameter grids.
 - Walk-forward results with fold table, selected parameters per fold, train/test metric comparison, degradation ratio, aggregate warnings, and parameter stability.
+- AI Builder prompt panel for natural-language strategy drafts, prompt templates, auditable generated-strategy preview, compile-and-load handoff into existing workflow forms, and reproducibility JSON.
 - Research disclaimer: not investment advice.
 
 The frontend does not implement backtesting, grid search, walk-forward optimization, portfolio accounting, benchmark math, or performance metrics in TypeScript. It submits requests to FastAPI and renders the returned metrics, series, trades, research rows, warnings, and config.
@@ -169,8 +170,10 @@ Endpoints:
   - Response includes folds, selected train parameters, out-of-sample test metrics, degradation ratios, aggregate warnings, and parameter stability.
 - `POST /api/ai/strategy-draft`
   - Converts a natural-language prompt into a structured strategy draft.
-  - Uses a deterministic fake provider for now; it does not call a real LLM.
-  - Returns inert JSON only. Drafts are inspectable and validated, but not compiled or executed yet.
+  - Uses the server-side provider factory. By default this is the deterministic fake provider; real OpenAI-compatible providers are opt-in through backend environment variables.
+- `POST /api/ai/compile`
+  - Compiles a validated strategy draft into an existing single-run, grid-search, or walk-forward request payload.
+  - Returns inert JSON only. It does not execute the compiled request, run a backtest, or generate strategy code.
 
 By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
 
@@ -183,6 +186,23 @@ By default, the API allows browser requests from `http://localhost:3000` and `ht
 ```bash
 BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
+
+### AI Builder Provider Configuration
+
+AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into a real server-side OpenAI-compatible chat completion provider, configure the backend before starting FastAPI:
+
+```bash
+BACKTESTER_AI_ENABLED=true
+BACKTESTER_AI_PROVIDER=deepseek
+BACKTESTER_AI_MODEL=deepseek-chat
+BACKTESTER_AI_API_KEY=
+BACKTESTER_AI_BASE_URL=
+BACKTESTER_AI_TIMEOUT_SECONDS=30
+```
+
+Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, and `openai_compatible`. `BACKTESTER_AI_BASE_URL` is optional for built-in defaults, but useful for OpenAI-compatible endpoints. API keys stay on the FastAPI server and are never sent to the browser. Do not put `BACKTESTER_AI_API_KEY` in `frontend/.env.local`.
+
+AI outputs are treated as untrusted. The API parses JSON only, rejects raw code-looking responses and unexpected fields, validates drafts with Pydantic plus `backtester/ai/validator.py`, and compiles only into existing request schemas. It never executes generated code, never places trades, and does not provide investment advice.
 
 ## Local API + Frontend Workflow
 
@@ -200,10 +220,11 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
    ```
 
 3. Open `http://localhost:3000`.
-4. Use the default AAPL Momentum SMA setup or switch between Single Run, Grid Search, and Walk-Forward modes.
+4. Use the default AAPL Momentum SMA setup or switch between Single Run, Grid Search, Walk-Forward, and AI Builder modes.
 5. Run a backtest and inspect equity, drawdown, trades, risk, metrics, and parameters.
 6. Run grid search to compare parameter combinations, inspect robustness warnings, export CSV, and promote a selected row into a single backtest.
 7. Run walk-forward validation to compare train and out-of-sample test performance by fold.
+8. Use AI Builder to draft a supported strategy idea, review assumptions and warnings, then load the compiled request into an existing form before running it.
 
 yfinance may require network access unless the requested data is already cached.
 
@@ -308,7 +329,7 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 ## Known Limitations
 
 - Backtest Lab research workflows are still single-asset only.
-- AI Strategy Builder is backend skeleton only. It uses a fake deterministic provider, rejects unsupported/unsafe requests, never executes generated code, and does not yet compile drafts into backtest, grid-search, or walk-forward requests.
+- AI Strategy Builder uses a fake deterministic provider by default and can call an opt-in server-side OpenAI-compatible provider when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. The frontend can review and load compiled configs, but it does not run them automatically.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
 - Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
 - No authentication.

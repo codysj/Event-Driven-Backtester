@@ -11,6 +11,7 @@ type AppShellProps = {
   onRun: () => void;
   onReset: () => void;
   actionLabel?: string;
+  showRunAction?: boolean;
   configPanel: ReactNode;
   children: ReactNode;
 };
@@ -23,6 +24,7 @@ export function AppShell({
   onRun,
   onReset,
   actionLabel,
+  showRunAction = true,
   configPanel,
   children
 }: AppShellProps) {
@@ -37,6 +39,7 @@ export function AppShell({
         onRun={onRun}
         onReset={onReset}
         actionLabel={actionLabel}
+        showRunAction={showRunAction}
       />
       <div className="grid gap-5 px-4 py-5 lg:ml-[220px] xl:grid-cols-[minmax(0,1fr)_320px]">
         <section id="lab" className="min-w-0">

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backtester.api.schemas import OptimizationMetric
 from backtester.engine import PositionSizeMethod
@@ -112,6 +113,40 @@ class StrategyDraftResponse(BaseModel):
 
     draft: StrategyDraft | None
     status: StrategyDraftStatus
+    warnings: list[str] = Field(default_factory=list)
+    unsupported: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(default_factory=list)
+
+
+class StrategyCompileRequest(BaseModel):
+    """Request to compile an inert draft into an existing API request payload."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    draft: StrategyDraft
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_draft_or_response_payload(cls, data: Any) -> Any:
+        """Accept either {"draft": ...} or a bare StrategyDraft-shaped body."""
+        if isinstance(data, StrategyDraft):
+            return {"draft": data}
+        if not isinstance(data, Mapping):
+            return data
+        if "draft" in data:
+            return {"draft": data["draft"]}
+        if "strategy_kind" in data or "target_mode" in data:
+            return {"draft": data}
+        return data
+
+
+class StrategyCompileResponse(BaseModel):
+    """Compiled request payload for one existing API workflow."""
+
+    target_mode: TargetMode
+    status: StrategyDraftStatus
+    payload: dict[str, Any] | None = None
+    assumptions: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     unsupported: list[str] = Field(default_factory=list)
     validation_errors: list[str] = Field(default_factory=list)

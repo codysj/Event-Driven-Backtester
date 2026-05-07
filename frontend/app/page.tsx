@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { BacktestForm } from "../components/BacktestForm";
+import { AiBuilderPanel } from "../components/ai-builder/AiBuilderPanel";
 import { GridSearchForm, WalkForwardForm } from "../components/ResearchForms";
 import { GridSearchResults, WalkForwardResults } from "../components/ResearchResults";
 import { ResultsDashboard } from "../components/ResultsDashboard";
@@ -13,6 +14,7 @@ import type {
   BacktestResponse,
   GridSearchRequest,
   GridSearchResponse,
+  StrategyCompileResponse,
   StrategyMetadata,
   WalkForwardRequest,
   WalkForwardResponse
@@ -26,7 +28,7 @@ import {
 } from "../lib/validation";
 
 type ApiStatus = "checking" | "online" | "offline";
-type LabMode = "backtest" | "grid" | "walk";
+type LabMode = "backtest" | "grid" | "walk" | "ai";
 
 function cloneDefaultRequest(): BacktestRequest {
   return {
@@ -65,6 +67,8 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [gridError, setGridError] = useState<string | null>(null);
   const [walkError, setWalkError] = useState<string | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
+  const [handoffWarnings, setHandoffWarnings] = useState<string[]>([]);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
 
   useEffect(() => {
@@ -94,6 +98,14 @@ export default function HomePage() {
   }
 
   function resetDefaults() {
+    if (mode === "ai") {
+      setError(null);
+      setGridError(null);
+      setWalkError(null);
+      setHandoffMessage(null);
+      setHandoffWarnings([]);
+      return;
+    }
     if (mode === "grid") {
       setGridRequest(cloneDefaultGridRequest());
       setGridErrors({});
@@ -121,6 +133,8 @@ export default function HomePage() {
 
     setIsLoading(true);
     setError(null);
+    setHandoffMessage(null);
+    setHandoffWarnings([]);
     try {
       const response = await runBacktest({
         ...nextRequest,
@@ -145,6 +159,8 @@ export default function HomePage() {
 
     setIsLoading(true);
     setGridError(null);
+    setHandoffMessage(null);
+    setHandoffWarnings([]);
     try {
       const response = await runGridSearch({
         ...nextRequest,
@@ -169,6 +185,8 @@ export default function HomePage() {
 
     setIsLoading(true);
     setWalkError(null);
+    setHandoffMessage(null);
+    setHandoffWarnings([]);
     try {
       const response = await runWalkForward({
         ...nextRequest,
@@ -190,6 +208,41 @@ export default function HomePage() {
     void submitBacktest(selectedRequest);
   }
 
+  function loadCompiledStrategy(response: StrategyCompileResponse) {
+    if (response.status !== "ready" || !response.payload) {
+      return;
+    }
+
+    setHandoffMessage("AI Builder loaded a compiled request into this workflow. Review the form before running.");
+    setHandoffWarnings(response.warnings);
+
+    if (response.target_mode === "single_run") {
+      const compiled = response.payload as BacktestRequest;
+      setRequest(compiled);
+      setFormErrors({});
+      setError(null);
+      setMode("backtest");
+      return;
+    }
+
+    if (response.target_mode === "grid_search") {
+      const compiled = response.payload as GridSearchRequest;
+      setGridRequest(compiled);
+      setGridErrors({});
+      setGridError(null);
+      setMode("grid");
+      return;
+    }
+
+    if (response.target_mode === "walk_forward") {
+      const compiled = response.payload as WalkForwardRequest;
+      setWalkRequest(compiled);
+      setWalkErrors({});
+      setWalkError(null);
+      setMode("walk");
+    }
+  }
+
   function runDefault() {
     const defaultRequest = cloneDefaultRequest();
     setRequest(defaultRequest);
@@ -197,7 +250,24 @@ export default function HomePage() {
   }
 
   const configPanel =
-    mode === "grid" ? (
+    mode === "ai" ? (
+      <div className="space-y-5">
+        <section className="rounded-xl border border-lab-border bg-lab-surface p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-lab-secondary">Builder Scope</h3>
+          <p className="mt-2 text-sm leading-6 text-lab-secondary">
+            Drafting and compilation call FastAPI AI endpoints. Loaded configs land in the existing workflow forms and wait for your review.
+          </p>
+        </section>
+        <section className="rounded-xl border border-lab-border bg-lab-surface p-4">
+          <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-lab-secondary">Supported V1</h3>
+          <ul className="mt-3 space-y-2 text-sm text-lab-secondary">
+            <li>Momentum SMA crossover</li>
+            <li>Mean reversion bands</li>
+            <li>Single Run, Grid Search, and Walk-Forward handoff</li>
+          </ul>
+        </section>
+      </div>
+    ) : mode === "grid" ? (
       <GridSearchForm
         request={gridRequest}
         strategies={strategies}
@@ -242,13 +312,15 @@ export default function HomePage() {
       onRun={runActive}
       onReset={resetDefaults}
       actionLabel={actionLabel}
+      showRunAction={mode !== "ai"}
       configPanel={configPanel}
     >
       <div className="mb-5 flex flex-wrap gap-2 rounded-xl border border-lab-border bg-lab-surface p-2">
         {[
           { id: "backtest", label: "Single Run" },
           { id: "grid", label: "Grid Search" },
-          { id: "walk", label: "Walk-Forward" }
+          { id: "walk", label: "Walk-Forward" },
+          { id: "ai", label: "AI Builder" }
         ].map((item) => (
           <button
             key={item.id}
@@ -263,7 +335,23 @@ export default function HomePage() {
         ))}
       </div>
 
-      {mode === "grid" ? (
+      {mode !== "ai" && handoffMessage ? (
+        <section className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+          <h2 className="text-sm font-semibold text-emerald-100">AI Builder Handoff</h2>
+          <p className="mt-2 text-sm leading-6 text-emerald-100/90">{handoffMessage}</p>
+          {handoffWarnings.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-sm leading-6 text-amber-100">
+              {handoffWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
+      {mode === "ai" ? (
+        <AiBuilderPanel onLoadCompiled={loadCompiledStrategy} />
+      ) : mode === "grid" ? (
         <GridSearchResults result={gridResult} isLoading={isLoading} error={gridError} onRunSelected={runSelectedConfig} />
       ) : mode === "walk" ? (
         <WalkForwardResults result={walkResult} isLoading={isLoading} error={walkError} />

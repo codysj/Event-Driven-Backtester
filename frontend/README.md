@@ -1,6 +1,6 @@
 # Backtest Lab Frontend
 
-Backtest Lab is the Next.js dashboard for the Backtester project. It is a local research UI for running single-asset backtests, grid searches, and walk-forward validation through the FastAPI API.
+Backtest Lab is the Next.js dashboard for the Backtester project. It is a local research UI for running single-asset backtests, grid searches, walk-forward validation, and natural-language AI Builder handoffs through the FastAPI API.
 
 The frontend does not implement backtesting, grid-search, walk-forward, metrics, portfolio, or benchmark logic. It calls the Python API and renders the returned response.
 
@@ -48,6 +48,8 @@ Override this with `frontend/.env.local`:
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
+Only public browser settings belong in `frontend/.env.local`. AI provider keys such as `BACKTESTER_AI_API_KEY` are backend/server variables and must not be exposed through `NEXT_PUBLIC_*`.
+
 Start the API from the repo root:
 
 ```bash
@@ -78,6 +80,8 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
   - Controlled single-asset backtest form with inline validation display.
 - `components/ResearchForms.tsx`
   - Controlled grid-search and walk-forward forms with range inputs, optimization metrics, and fold windows.
+- `components/ai-builder/`
+  - Natural-language AI Builder prompt panel, prompt templates, generated strategy preview, assumptions/warnings/unsupported states, compile handoff, and reproducibility JSON.
 - `components/ResultsDashboard.tsx`
   - Run hero, status, KPI cards, charts, and result tabs.
 - `components/ResearchResults.tsx`
@@ -95,7 +99,7 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 - `components/formatters.ts`
   - Shared formatting helpers.
 - `lib/api.ts`
-  - API client for `GET /health`, `GET /api/strategies`, `POST /api/backtest`, `POST /api/grid-search`, and `POST /api/walk-forward`.
+  - API client for `GET /health`, `GET /api/strategies`, `POST /api/backtest`, `POST /api/grid-search`, `POST /api/walk-forward`, `POST /api/ai/strategy-draft`, and `POST /api/ai/compile`.
 - `lib/types.ts`
   - TypeScript request/response shapes matching the FastAPI schema.
 - `lib/exports.ts`
@@ -114,8 +118,12 @@ Backtest Lab assumes these API endpoints exist:
 - `POST /api/backtest`
 - `POST /api/grid-search`
 - `POST /api/walk-forward`
+- `POST /api/ai/strategy-draft`
+- `POST /api/ai/compile`
 
 All current browser workflows are single-asset. `POST /api/backtest` returns submitted config, summary metrics, equity/benchmark/drawdown/price series, trades, and richer risk analytics. `POST /api/grid-search` returns ranked research rows, failed combinations, heatmap data, and robustness warnings. `POST /api/walk-forward` returns folds, selected parameters, train/test metrics, degradation ratios, and aggregate validation warnings.
+The AI Builder endpoints return inert draft and compiled request JSON only. The frontend reviews and loads compiled payloads into existing forms; it does not execute them automatically.
+AI provider selection and API keys are handled only by the FastAPI backend. The browser never sends or receives provider credentials.
 
 ## Screenshot / GIF Workflow
 

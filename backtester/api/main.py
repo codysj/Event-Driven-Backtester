@@ -7,8 +7,13 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from backtester.ai import draft_strategy_from_request
-from backtester.ai.schemas import StrategyDraftRequest, StrategyDraftResponse
+from backtester.ai import compile_strategy_draft, draft_strategy_from_request
+from backtester.ai.schemas import (
+    StrategyCompileRequest,
+    StrategyCompileResponse,
+    StrategyDraftRequest,
+    StrategyDraftResponse,
+)
 from backtester.api.schemas import (
     BacktestRequest,
     BacktestResponse,
@@ -67,6 +72,12 @@ def strategies() -> StrategiesResponse:
 def draft_ai_strategy(request: StrategyDraftRequest) -> StrategyDraftResponse:
     """Create an inert strategy draft from a natural-language prompt."""
     return draft_strategy_from_request(request)
+
+
+@app.post("/api/ai/compile", response_model=StrategyCompileResponse)
+def compile_ai_strategy(request: StrategyCompileRequest) -> StrategyCompileResponse:
+    """Compile an inert strategy draft into an existing API request payload."""
+    return compile_strategy_draft(request.draft)
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)

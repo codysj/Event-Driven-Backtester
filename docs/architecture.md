@@ -15,7 +15,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `backtester/data/`
   - Fetches OHLCV data with yfinance, cleans it, validates schema, and caches Parquet files under `~/.backtester/cache/`.
 - `backtester/ai/`
-  - Defines the safe natural-language strategy draft contract, future prompt template, provider abstraction, deterministic fake provider, validation helpers, and placeholder compilers. Drafts are inert data and are not executed.
+  - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
 - `backtester/strategy/`
   - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
@@ -56,7 +56,8 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - FastAPI `POST /api/backtest` wraps a single-asset backtest for Backtest Lab.
 - FastAPI `POST /api/grid-search` wraps single-asset parameter sweeps, heatmap data, and deterministic robustness analysis.
 - FastAPI `POST /api/walk-forward` wraps rolling train/test validation using grid-search-selected parameters per fold.
-- FastAPI `POST /api/ai/strategy-draft` wraps the AI Strategy Builder skeleton and returns validated structured drafts without calling a real LLM.
+- FastAPI `POST /api/ai/strategy-draft` wraps the AI Strategy Builder provider factory and returns validated structured drafts. The fake provider is the default; real providers are server-side opt-in.
+- FastAPI `POST /api/ai/compile` compiles validated drafts into existing API-compatible request payloads without running them.
 - Frontend `frontend/lib/api.ts` isolates API calls from UI components.
 - Frontend `frontend/lib/validation.ts` performs inline form validation before POST requests.
 
@@ -91,14 +92,27 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
    - Executed trades
 9. Frontend renders KPI cards, Recharts equity/drawdown charts, result tabs, trades, metrics, and parameters.
 
-### Natural-Language Strategy Draft Flow
+### Natural-Language Strategy Draft And Compile Flow
 
 1. A client submits a prompt to `POST /api/ai/strategy-draft`.
-2. The API calls the deterministic `FakeStrategyDraftProvider`.
-3. The provider returns a constrained `StrategyDraft` describing a single-run, grid-search, walk-forward, or unspecified target.
+2. The API calls `get_strategy_draft_provider()`, which selects the deterministic fake provider by default or an opt-in server-side OpenAI-compatible provider from backend environment variables.
+3. The provider returns a constrained `StrategyDraft` describing a single-run, grid-search, walk-forward, or unspecified target. Real-provider responses are parsed as JSON, checked for raw code-looking output, and validated into the same Pydantic schema.
 4. `backtester/ai/validator.py` checks semantic safety: ticker readiness, ISO dates, date order, supported strategy kind, positive windows, momentum window ordering, mean-reversion bands, unsupported concepts, and raw-code fields.
 5. The API returns structured JSON containing the draft, status, warnings, unsupported items, and validation errors.
-6. The draft is not compiled or executed. Follow-up work will compile reviewed drafts into existing API request schemas.
+6. A reviewed draft can be submitted to `POST /api/ai/compile`.
+7. `backtester/ai/compiler.py` maps the draft into an existing `BacktestRequest`, `GridSearchRequest`, or `WalkForwardRequest` payload.
+8. Missing research grids, date ranges, optimization metrics, and walk-forward windows use deterministic defaults with warnings.
+9. The compiled payload is not executed. Clients must submit it to the existing workflow endpoints if they choose to run it.
+
+### Browser AI Builder Flow
+
+1. User switches Backtest Lab into AI Builder mode.
+2. Frontend collects a natural-language prompt and submits it to `POST /api/ai/strategy-draft`.
+3. The browser renders the returned draft as an auditable strategy card: target mode, ticker/date range, strategy kind, parameters, sizing, costs, benchmark, assumptions, warnings, unsupported items, validation errors, and readiness status.
+4. User can inspect secondary reproducibility JSON for the original prompt, validated draft, and latest compiled payload.
+5. When the user chooses to load the draft, frontend calls `POST /api/ai/compile`.
+6. The compile response payload is copied into the existing Single Run, Grid Search, or Walk-Forward form based on `target_mode`.
+7. The workflow form is shown for review. Backtest Lab does not execute the loaded request until the user runs the existing workflow.
 
 ### Browser Grid Search Flow
 
@@ -202,6 +216,17 @@ FastAPI app: `backtester/api/main.py`
     - `warnings`
     - `unsupported`
     - `validation_errors`
+- `POST /api/ai/compile`
+  - Request schema:
+    - `draft`, or a bare StrategyDraft-shaped body
+  - Response schema:
+    - `target_mode`
+    - `status`
+    - `payload`
+    - `assumptions`
+    - `warnings`
+    - `unsupported`
+    - `validation_errors`
 
 The API normalizes ticker case and validates strategy parameters with Pydantic.
 
@@ -215,6 +240,8 @@ Main component groups:
   - Full-screen application frame and run context.
 - `BacktestForm`, `GridSearchForm`, `WalkForwardForm`
   - Controlled right-side configuration panels for single-run and research workflows.
+- `ai-builder/*`
+  - Natural-language prompt panel, prompt templates, generated strategy preview, assumptions/warnings display, compile handoff, and reproducibility JSON.
 - `ResultsDashboard`
   - Run hero, KPI cards, chart stack, and tab orchestration.
 - `GridSearchResults`, `WalkForwardResults`
@@ -236,7 +263,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - FastAPI serves the local API.
 - The Next.js frontend calls `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000`.
 - No database, auth provider, broker API, payment system, paid data feed, or live trading integration is present.
-- No real LLM provider is currently called. The AI Strategy Builder uses a deterministic fake provider and returns inert draft JSON only.
+- The AI Strategy Builder uses a deterministic fake provider by default. Optional real provider support uses server-side OpenAI-compatible chat completion calls only when `BACKTESTER_AI_PROVIDER` and server-side credentials are configured.
 
 ## Configuration And Environment
 
@@ -249,6 +276,14 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
   - `http://localhost:3000`
   - `http://127.0.0.1:3000`
 - Additional API CORS origins can be configured with comma-separated `BACKTESTER_CORS_ORIGINS`.
+- AI Builder backend env vars:
+  - `BACKTESTER_AI_ENABLED=true|false`
+  - `BACKTESTER_AI_PROVIDER=fake|deepseek|openai_compatible`
+  - `BACKTESTER_AI_MODEL`
+  - `BACKTESTER_AI_API_KEY`
+  - `BACKTESTER_AI_BASE_URL`
+  - `BACKTESTER_AI_TIMEOUT_SECONDS`
+- AI provider keys are backend-only. The frontend receives draft statuses, warnings, unsupported items, and validation errors, never API keys.
 - CI is `.github/workflows/ci.yml`; it installs Python requirements, runs `python -m pytest`, runs `python -m mypy backtester`, installs frontend dependencies with `npm ci`, runs `npm audit`, runs `npm run lint`, runs `npm run typecheck`, and runs `npm run build`.
 
 ## Important Design Decisions
@@ -261,7 +296,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
-- AI strategy drafts are never executable code. Unsupported ideas such as broker execution, live trading, intraday minute bars, options flow, sentiment feeds, and multi-asset portfolios are surfaced as unsupported for the v1 builder.
+- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

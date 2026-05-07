@@ -9,6 +9,7 @@ from backtester.ai.schemas import (
     StrategyDraftStatus,
     StrategyDraftValidation,
     StrategyKind,
+    TargetMode,
 )
 
 
@@ -24,6 +25,21 @@ RAW_CODE_KEYS = frozenset(
         "module",
     }
 )
+UNSUPPORTED_CONCEPT_TERMS = (
+    "broker execution",
+    "live trading",
+    "broker",
+    "options flow",
+    "twitter sentiment",
+    "sentiment feed",
+    "intraday",
+    "minute bars",
+    "filesystem",
+    "file path",
+    "write file",
+    "multi-asset",
+    "multi asset",
+)
 
 
 def validate_strategy_draft(draft: StrategyDraft) -> StrategyDraftValidation:
@@ -31,6 +47,9 @@ def validate_strategy_draft(draft: StrategyDraft) -> StrategyDraftValidation:
     errors: list[str] = []
     warnings: list[str] = []
     unsupported = list(draft.unsupported)
+    for term in _unsupported_terms_in_draft(draft):
+        if term not in unsupported:
+            unsupported.append(term)
 
     if draft.status == StrategyDraftStatus.READY and not draft.ticker:
         errors.append("ticker is required for ready drafts.")
@@ -89,23 +108,35 @@ def _reject_raw_code_keys(
         errors.append(f"{field_name} cannot include raw code field(s): {', '.join(blocked)}.")
 
 
+def _unsupported_terms_in_draft(draft: StrategyDraft) -> list[str]:
+    text_parts = [
+        *(draft.assumptions),
+        *(draft.warnings),
+        *(draft.unsupported),
+    ]
+    lowered = "\n".join(text_parts).lower()
+    return [term for term in UNSUPPORTED_CONCEPT_TERMS if term in lowered]
+
+
 def _validate_momentum_parameters(draft: StrategyDraft, errors: list[str]) -> None:
-    fast_window = _positive_integer_parameter(draft.parameters, "fast_window", errors)
-    slow_window = _positive_integer_parameter(draft.parameters, "slow_window", errors)
-    if fast_window is not None and slow_window is not None and fast_window >= slow_window:
-        errors.append("fast_window must be less than slow_window.")
+    if draft.parameters or draft.target_mode == TargetMode.SINGLE_RUN:
+        fast_window = _positive_integer_parameter(draft.parameters, "fast_window", errors)
+        slow_window = _positive_integer_parameter(draft.parameters, "slow_window", errors)
+        if fast_window is not None and slow_window is not None and fast_window >= slow_window:
+            errors.append("fast_window must be less than slow_window.")
     if draft.parameter_grid is not None:
         _validate_parameter_grid(draft.parameter_grid, {"fast_window", "slow_window"}, errors)
         _validate_momentum_grid_order(draft.parameter_grid, errors)
 
 
 def _validate_mean_reversion_parameters(draft: StrategyDraft, errors: list[str]) -> None:
-    _positive_integer_parameter(draft.parameters, "window", errors)
-    num_std = draft.parameters.get("num_std")
-    if num_std is None:
-        errors.append("num_std is required for mean_reversion drafts.")
-    elif float(num_std) <= 0:
-        errors.append("num_std must be positive.")
+    if draft.parameters or draft.target_mode == TargetMode.SINGLE_RUN:
+        _positive_integer_parameter(draft.parameters, "window", errors)
+        num_std = draft.parameters.get("num_std")
+        if num_std is None:
+            errors.append("num_std is required for mean_reversion drafts.")
+        elif float(num_std) <= 0:
+            errors.append("num_std must be positive.")
     if draft.parameter_grid is not None:
         _validate_parameter_grid(draft.parameter_grid, {"window", "num_std"}, errors)
 
