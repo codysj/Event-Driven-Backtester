@@ -2,7 +2,7 @@
 
 import { Play, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useMemo } from "react";
-import type { BacktestRequest, PositionSizeMethod, StrategyId, StrategyMetadata } from "../lib/types";
+import type { BacktestRequest, ConditionSpec, IndicatorSpec, PositionSizeMethod, StrategyId, StrategyMetadata } from "../lib/types";
 import type { FormErrors } from "../lib/validation";
 
 type BacktestFormProps = {
@@ -37,6 +37,16 @@ function SectionHeading({ title, kicker }: { title: string; kicker?: string }) {
       {kicker ? <p className="mt-1 text-xs leading-5 text-lab-muted">{kicker}</p> : null}
     </div>
   );
+}
+
+function indicatorLabel(indicator: IndicatorSpec): string {
+  if (indicator.name === "close") return "close";
+  const suffix = indicator.num_std ? `, ${indicator.num_std} std` : "";
+  return `${indicator.name.replaceAll("_", " ")}(${indicator.window}${suffix})`;
+}
+
+function conditionLabel(condition: ConditionSpec): string {
+  return `${indicatorLabel(condition.left)} ${condition.operator} ${indicatorLabel(condition.right)}`;
 }
 
 export function BacktestForm({
@@ -76,7 +86,8 @@ export function BacktestForm({
     onChange({
       ...request,
       strategy: strategyId,
-      parameters
+      parameters,
+      rule_spec: null
     });
   }
 
@@ -170,6 +181,20 @@ export function BacktestForm({
             </label>
           ))}
         </div>
+        {request.strategy === "rule_based" ? (
+          <div className="mt-3 rounded-lg border border-lab-border bg-lab-bg p-3">
+            <div className="text-xs uppercase tracking-[0.16em] text-lab-muted">Rule Set</div>
+            {request.rule_spec ? (
+              <div className="mt-2 space-y-2 font-mono-finance text-xs leading-5 text-lab-secondary">
+                <p>Entry: {request.rule_spec.rules.entry.map(conditionLabel).join(" AND ")}</p>
+                <p>Exit: {request.rule_spec.rules.exit.map(conditionLabel).join(" OR ")}</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-lab-secondary">Load a generated rule-based draft from AI Builder.</p>
+            )}
+            <FieldError message={errors.rule_spec} />
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-lab-border bg-lab-surface p-4">

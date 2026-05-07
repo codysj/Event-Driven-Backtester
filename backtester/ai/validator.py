@@ -23,6 +23,8 @@ RAW_CODE_KEYS = frozenset(
         "function",
         "callable",
         "module",
+        "lambda",
+        "__",
     }
 )
 UNSUPPORTED_CONCEPT_TERMS = (
@@ -39,6 +41,10 @@ UNSUPPORTED_CONCEPT_TERMS = (
     "write file",
     "multi-asset",
     "multi asset",
+    "python",
+    "lambda",
+    "eval",
+    "exec",
 )
 
 
@@ -70,6 +76,8 @@ def validate_strategy_draft(draft: StrategyDraft) -> StrategyDraftValidation:
         _validate_momentum_parameters(draft, errors)
     elif draft.strategy_kind == StrategyKind.MEAN_REVERSION:
         _validate_mean_reversion_parameters(draft, errors)
+    elif draft.strategy_kind == StrategyKind.RULE_BASED:
+        _validate_rule_based_draft(draft, errors)
     else:
         errors.append(f"Unsupported strategy kind: {draft.strategy_kind.value}.")
 
@@ -139,6 +147,17 @@ def _validate_mean_reversion_parameters(draft: StrategyDraft, errors: list[str])
             errors.append("num_std must be positive.")
     if draft.parameter_grid is not None:
         _validate_parameter_grid(draft.parameter_grid, {"window", "num_std"}, errors)
+
+
+def _validate_rule_based_draft(draft: StrategyDraft, errors: list[str]) -> None:
+    if draft.rule_spec is None:
+        errors.append("rule_spec is required for rule_based drafts.")
+    if draft.parameters:
+        errors.append("rule_based drafts cannot include numeric strategy parameters.")
+    if draft.parameter_grid is not None:
+        errors.append("rule_based drafts do not support parameter_grid in v1.")
+    if draft.target_mode not in {TargetMode.SINGLE_RUN, TargetMode.UNSPECIFIED}:
+        errors.append("rule_based drafts can only compile to single_run in v1.")
 
 
 def _positive_integer_parameter(

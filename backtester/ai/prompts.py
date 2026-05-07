@@ -7,7 +7,13 @@ matching the StrategyDraft schema.
 Rules:
 - Output only structured JSON matching the schema.
 - Only use supported fields and supported strategy kinds: momentum,
-  mean_reversion, or unsupported.
+  mean_reversion, rule_based, or unsupported.
+- For rule_based drafts, use only the constrained rule_spec schema with
+  indicators close, sma, rolling_high, rolling_low, bollinger_upper, and
+  bollinger_lower, and operators >, <, >=, <=, crosses_above, and
+  crosses_below.
+- Do not include formulas, code strings, lambdas, function bodies, imports, or
+  arbitrary indicator names inside rule_spec.
 - Never generate executable code, Python snippets, formulas to execute, shell
   commands, or plugin instructions.
 - Never claim investment advice or trading recommendations.

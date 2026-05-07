@@ -5,7 +5,7 @@ import type {
   GridSearchRequest,
   OptimizationMetric,
   PositionSizeMethod,
-  StrategyId,
+  ResearchStrategyId,
   StrategyMetadata,
   WalkForwardRequest
 } from "../lib/types";
@@ -65,7 +65,7 @@ function rangeText(values: number[] | undefined): string {
   return (values ?? []).join(", ");
 }
 
-function strategyGrid(strategyId: StrategyId): Record<string, number[]> {
+function strategyGrid(strategyId: ResearchStrategyId): Record<string, number[]> {
   if (strategyId === "momentum") {
     return { fast_window: [5, 10, 15], slow_window: [30, 50, 80] };
   }
@@ -85,7 +85,7 @@ function BaseResearchFields<T extends GridSearchRequest | WalkForwardRequest>({
     onChange({ ...request, [key]: value });
   }
 
-  function changeStrategy(strategy: StrategyId) {
+  function changeStrategy(strategy: ResearchStrategyId) {
     onChange({ ...request, strategy, parameter_grid: strategyGrid(strategy) });
   }
 
@@ -99,7 +99,8 @@ function BaseResearchFields<T extends GridSearchRequest | WalkForwardRequest>({
     });
   }
 
-  const selectedStrategy = strategies.find((item) => item.id === request.strategy);
+  const researchStrategies = strategies.filter((item) => item.id !== "rule_based");
+  const selectedStrategy = researchStrategies.find((item) => item.id === request.strategy);
 
   return (
     <>
@@ -148,10 +149,10 @@ function BaseResearchFields<T extends GridSearchRequest | WalkForwardRequest>({
           <span className="text-sm font-medium text-lab-text">Strategy</span>
           <select
             value={request.strategy}
-            onChange={(event) => changeStrategy(event.target.value as StrategyId)}
+            onChange={(event) => changeStrategy(event.target.value as ResearchStrategyId)}
             className="mt-2 w-full rounded-lg border border-lab-border bg-lab-bg px-3 py-2 text-sm text-lab-text outline-none transition focus:border-lab-blue focus:ring-2 focus:ring-lab-blue/20"
           >
-            {strategies.map((strategy) => (
+            {researchStrategies.map((strategy) => (
               <option key={strategy.id} value={strategy.id}>
                 {strategy.name}
               </option>

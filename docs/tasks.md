@@ -7,6 +7,7 @@
   - `POST /api/ai/strategy-draft` returns inert, validated draft JSON. Fake remains the default provider; real providers are server-side opt-in through env vars.
   - `POST /api/ai/compile` compiles reviewed drafts into existing Backtest, Grid Search, and Walk-Forward request payloads.
   - Backtest Lab AI Builder UI now drafts from prompts, previews assumptions/warnings/unsupported items, compiles drafts, and loads compiled configs into existing workflow forms.
+  - Constrained rule-based strategy DSL added for AI Builder single-run handoff: close, SMA, prior rolling high/low, Bollinger bands, and simple comparison/cross operators.
   - No generated Python execution, persistence, broker integration, live trading, frontend API-key handling, or committed secrets.
 
 The latest research-workstation batch added:
@@ -18,7 +19,7 @@ The latest research-workstation batch added:
 ## Next
 
 - Expose multi-asset backtesting through FastAPI if the dashboard roadmap needs it.
-- Define a small typed rule DSL or strategy intent layer before expanding AI-generated strategy coverage.
+- Expand the rule DSL only when there is a tested strategy intent contract for more indicators, OR composition, and research optimization.
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.
 - Add CLI support for multi-asset backtests.
 - Add a small screenshot or short GIF asset for the remodeled Backtest Lab if a committed portfolio asset is desired.

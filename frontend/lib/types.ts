@@ -1,4 +1,5 @@
-export type StrategyId = "momentum" | "mean_reversion";
+export type StrategyId = "momentum" | "mean_reversion" | "rule_based";
+export type ResearchStrategyId = Exclude<StrategyId, "rule_based">;
 
 export type PositionSizeMethod =
   | "FIXED_DOLLAR"
@@ -34,6 +35,7 @@ export type BacktestRequest = {
   position_size_value: number;
   benchmark: boolean;
   parameters: Record<string, number>;
+  rule_spec?: RuleBasedStrategySpec | null;
 };
 
 export type OptimizationMetric =
@@ -48,7 +50,8 @@ export type OptimizationMetric =
 
 export type ParameterGrid = Record<string, number[]>;
 
-export type ResearchBaseRequest = Omit<BacktestRequest, "parameters"> & {
+export type ResearchBaseRequest = Omit<BacktestRequest, "parameters" | "strategy" | "rule_spec"> & {
+  strategy: ResearchStrategyId;
   parameter_grid: ParameterGrid;
   optimization_metric: OptimizationMetric;
 };
@@ -68,6 +71,35 @@ export type AiTargetMode = "single_run" | "grid_search" | "walk_forward" | "unsp
 export type AiStrategyDraftStatus = "ready" | "needs_clarification" | "unsupported";
 
 export type AiStrategyKind = StrategyId | "unsupported";
+
+export type IndicatorName =
+  | "close"
+  | "sma"
+  | "rolling_high"
+  | "rolling_low"
+  | "bollinger_upper"
+  | "bollinger_lower";
+
+export type ConditionOperator = ">" | "<" | ">=" | "<=" | "crosses_above" | "crosses_below";
+
+export type IndicatorSpec = {
+  name: IndicatorName;
+  window?: number | null;
+  num_std?: number | null;
+};
+
+export type ConditionSpec = {
+  left: IndicatorSpec;
+  operator: ConditionOperator;
+  right: IndicatorSpec;
+};
+
+export type RuleBasedStrategySpec = {
+  rules: {
+    entry: ConditionSpec[];
+    exit: ConditionSpec[];
+  };
+};
 
 export type StrategyDraftRequest = {
   prompt: string;
@@ -89,6 +121,7 @@ export type StrategyDraft = {
   position_size_value: number | null;
   strategy_kind: AiStrategyKind;
   parameters: Record<string, number>;
+  rule_spec: RuleBasedStrategySpec | null;
   parameter_grid: ParameterGrid | null;
   optimization_metric: OptimizationMetric | null;
   train_window_bars: number | null;
@@ -230,7 +263,7 @@ export type RobustnessAnalysis = {
 
 export type GridSearchResponse = {
   config: Record<string, unknown>;
-  strategy_id: StrategyId;
+  strategy_id: ResearchStrategyId;
   strategy_name: string;
   optimization_metric: OptimizationMetric;
   total_combinations: number;
@@ -266,7 +299,7 @@ export type WalkForwardSummary = {
 
 export type WalkForwardResponse = {
   config: Record<string, unknown>;
-  strategy_id: StrategyId;
+  strategy_id: ResearchStrategyId;
   strategy_name: string;
   optimization_metric: OptimizationMetric;
   folds: WalkForwardFold[];

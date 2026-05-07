@@ -52,6 +52,9 @@ export function validateBacktestRequest(request: BacktestRequest, strategy?: Str
       errors["parameters.slow_window"] = "Slow window must be greater than fast window.";
     }
   }
+  if (request.strategy === "rule_based" && !request.rule_spec) {
+    errors.rule_spec = "Rule-based strategies require a generated rule spec.";
+  }
 
   return errors;
 }

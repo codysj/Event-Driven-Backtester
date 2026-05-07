@@ -263,6 +263,7 @@ export default function HomePage() {
           <ul className="mt-3 space-y-2 text-sm text-lab-secondary">
             <li>Momentum SMA crossover</li>
             <li>Mean reversion bands</li>
+            <li>Constrained rule-based single runs</li>
             <li>Single Run, Grid Search, and Walk-Forward handoff</li>
           </ul>
         </section>

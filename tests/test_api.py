@@ -43,7 +43,7 @@ def test_strategies_returns_supported_strategies() -> None:
 
     assert response.status_code == 200
     strategy_ids = {strategy["id"] for strategy in response.json()["strategies"]}
-    assert strategy_ids == {"momentum", "mean_reversion"}
+    assert strategy_ids == {"momentum", "mean_reversion", "rule_based"}
 
 
 def test_backtest_uses_service_layer(monkeypatch) -> None:  # type: ignore[no-untyped-def]

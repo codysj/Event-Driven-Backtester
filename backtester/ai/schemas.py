@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from backtester.api.schemas import OptimizationMetric
 from backtester.engine import PositionSizeMethod
+from backtester.strategy.rule_schema import RuleBasedStrategySpec
 
 
 class TargetMode(str, Enum):
@@ -26,6 +27,7 @@ class StrategyKind(str, Enum):
 
     MOMENTUM = "momentum"
     MEAN_REVERSION = "mean_reversion"
+    RULE_BASED = "rule_based"
     UNSUPPORTED = "unsupported"
 
 
@@ -75,6 +77,7 @@ class StrategyDraft(BaseModel):
     position_size_value: float | None = Field(default=10_000.0, gt=0)
     strategy_kind: StrategyKind = StrategyKind.UNSUPPORTED
     parameters: dict[str, int | float] = Field(default_factory=dict)
+    rule_spec: RuleBasedStrategySpec | None = None
     parameter_grid: dict[str, list[int | float]] | None = None
     optimization_metric: OptimizationMetric | None = None
     train_window_bars: int | None = Field(default=None, gt=0)

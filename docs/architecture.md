@@ -17,7 +17,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `backtester/ai/`
   - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
 - `backtester/strategy/`
-  - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, and a wrapper for applying one single-asset strategy across multiple assets.
+  - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, constrained rule DSL schemas, `RuleBasedStrategy`, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
   - Defines `Order`, `Trade`, `Position`, and `Portfolio`. Tracks cash, positions, trade history, and equity curve.
 - `backtester/engine/`
@@ -48,6 +48,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `DataLoader.fetch(ticker, start, end)` returns a cleaned OHLCV `DataFrame` with lowercase columns and `DatetimeIndex` named `date`.
 - `BacktestEngine.run()` runs one ticker with a `Strategy`.
 - `MultiAssetBacktestEngine.run()` runs multiple tickers with a `MultiAssetStrategy`.
+- `RuleBasedStrategy` evaluates Pydantic-validated rule specs over precomputed close, SMA, prior rolling high/low, and Bollinger band indicators without executing generated code.
 - `Portfolio.execute_order()` applies slippage/commission and mutates cash/positions on accepted trades.
 - `generate_report()` computes primary performance metrics and optional benchmark comparison keys.
 - Additional metrics helpers compute rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR from first principles.
@@ -101,8 +102,21 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 5. The API returns structured JSON containing the draft, status, warnings, unsupported items, and validation errors.
 6. A reviewed draft can be submitted to `POST /api/ai/compile`.
 7. `backtester/ai/compiler.py` maps the draft into an existing `BacktestRequest`, `GridSearchRequest`, or `WalkForwardRequest` payload.
-8. Missing research grids, date ranges, optimization metrics, and walk-forward windows use deterministic defaults with warnings.
-9. The compiled payload is not executed. Clients must submit it to the existing workflow endpoints if they choose to run it.
+8. Rule-based drafts compile to a single-run `BacktestRequest` with a strict `rule_spec`; built-in momentum and mean-reversion drafts can also compile to research workflows.
+9. Missing research grids, date ranges, optimization metrics, and walk-forward windows use deterministic defaults with warnings.
+10. The compiled payload is not executed. Clients must submit it to the existing workflow endpoints if they choose to run it.
+
+### Rule-Based Strategy DSL Flow
+
+1. Natural-language rule prompts are converted into `RuleBasedStrategySpec`, not Python code.
+2. The spec contains only enum-backed indicators and operators:
+   - indicators: `close`, `sma`, `rolling_high`, `rolling_low`, `bollinger_upper`, `bollinger_lower`
+   - operators: `>`, `<`, `>=`, `<=`, `crosses_above`, `crosses_below`
+3. API schemas validate the nested `rule_spec` with `extra="forbid"` before strategy construction.
+4. `backtester/api/services.py` builds `RuleBasedStrategy` server-side from the structured spec.
+5. `RuleBasedStrategy.precompute(data)` calculates indicator arrays from Pandas/NumPy only.
+6. `generate_signal(data, current_index)` reads only current and previous indicator values. Entry conditions use ALL logic; exit conditions use ANY logic.
+7. The engine remains strategy-agnostic and continues to receive only `Signal.BUY`, `Signal.SELL`, or `Signal.HOLD`.
 
 ### Browser AI Builder Flow
 
@@ -165,6 +179,7 @@ FastAPI app: `backtester/api/main.py`
     - `position_size_value`
     - `benchmark`
     - `parameters`
+    - optional `rule_spec` for `strategy="rule_based"`
   - Response schema:
     - `config`
     - `summary`
@@ -296,7 +311,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
-- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder.
+- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

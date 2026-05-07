@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ClipboardList, HelpCircle } from "lucide-react";
-import type { StrategyCompileResponse, StrategyDraft } from "../../lib/types";
+import type { ConditionSpec, IndicatorSpec, StrategyCompileResponse, StrategyDraft } from "../../lib/types";
 import { formatCurrency, formatDecimal, formatNumber } from "../formatters";
 import { StrategyAssumptions } from "./StrategyAssumptions";
 import { StrategyUnsupportedState } from "./StrategyUnsupportedState";
@@ -37,6 +37,21 @@ function gridLabel(values: Record<string, number[]> | null | undefined): string 
     .join(" / ");
 }
 
+function indicatorLabel(indicator: IndicatorSpec): string {
+  if (indicator.name === "close") return "close";
+  const suffix = indicator.num_std ? `, ${indicator.num_std} std` : "";
+  return `${indicator.name.replaceAll("_", " ")}(${indicator.window}${suffix})`;
+}
+
+function conditionLabel(condition: ConditionSpec): string {
+  return `${indicatorLabel(condition.left)} ${condition.operator} ${indicatorLabel(condition.right)}`;
+}
+
+function ruleListLabel(conditions: ConditionSpec[] | undefined, joiner: string): string {
+  if (!conditions || conditions.length === 0) return "Not specified";
+  return conditions.map(conditionLabel).join(` ${joiner} `);
+}
+
 function statusTone(status: StrategyDraft["status"]): string {
   if (status === "ready") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-100";
   if (status === "unsupported") return "border-lab-red/40 bg-lab-red/10 text-red-100";
@@ -61,6 +76,12 @@ function strategyInterpretation(draft: StrategyDraft): { entry: string; exit: st
     return {
       entry: "Close reaches or falls below the lower rolling band.",
       exit: "Close reaches or rises above the upper rolling band."
+    };
+  }
+  if (draft.strategy_kind === "rule_based") {
+    return {
+      entry: ruleListLabel(draft.rule_spec?.rules.entry, "AND"),
+      exit: ruleListLabel(draft.rule_spec?.rules.exit, "OR")
     };
   }
   return { entry: "Not available.", exit: "Not available." };
@@ -135,6 +156,7 @@ export function StrategyDraftPreview({
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <Detail label="Parameters" value={jsonLabel(draft.parameters)} />
             <Detail label="Parameter Grid" value={gridLabel(draft.parameter_grid)} />
+            {draft.strategy_kind === "rule_based" ? <Detail label="Rule Spec" value="Constrained DSL" /> : null}
             <Detail label="Entry" value={interpretation.entry} />
             <Detail label="Exit" value={interpretation.exit} />
             <Detail label="Sizing" value={`${labelize(draft.position_size_method)} / ${draft.position_size_value === null ? "default" : formatNumber(draft.position_size_value)}`} />

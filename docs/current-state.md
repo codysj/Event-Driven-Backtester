@@ -15,6 +15,11 @@ Last documentation pass: 2026-05-07.
 - Built-in strategies:
   - Momentum SMA crossover
   - Mean reversion with Bollinger-style bands
+- Constrained rule-based strategy DSL:
+  - `RuleBasedStrategySpec` with strict Pydantic indicator and condition schemas.
+  - `RuleBasedStrategy` implementing close, SMA, prior rolling high/low, and Bollinger upper/lower indicators.
+  - Operators: `>`, `<`, `>=`, `<=`, `crosses_above`, and `crosses_below`.
+  - Entry rules use ALL logic; exit rules use ANY logic.
 - Portfolio simulation:
   - Cash
   - Positions
@@ -67,7 +72,7 @@ Last documentation pass: 2026-05-07.
   - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, and optional OpenAI-compatible provider implementation.
   - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, and timeout. No API key is exposed to the frontend.
   - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
-  - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads.
+  - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads, including rule-based single-run payloads with `rule_spec`.
   - API endpoints return draft/compile status, warnings, unsupported items, and validation errors without executing workflows. Fake remains the default provider, including tests.
 - Backtest Lab frontend:
   - Next.js 15 App Router, TypeScript, Tailwind CSS, Recharts.
@@ -93,7 +98,7 @@ Last documentation pass: 2026-05-07.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- AI Strategy Builder can optionally call a real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend.
+- AI Strategy Builder can optionally call a real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
@@ -124,7 +129,7 @@ Last documentation pass: 2026-05-07.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
 - Measure a pre-optimization baseline for `docs/benchmark_results.md`.
 - Keep the frontend dependency audit clean during future upgrades.
-- Define a small rule DSL or typed strategy intent format before supporting strategies beyond momentum and mean reversion.
+- Expand the rule DSL only after there are clear tests and UI/API contracts for additional indicators, OR composition, and optimization.
 
 ## Commands Verified During This Documentation Pass
 

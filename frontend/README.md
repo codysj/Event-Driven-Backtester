@@ -122,7 +122,7 @@ Backtest Lab assumes these API endpoints exist:
 - `POST /api/ai/compile`
 
 All current browser workflows are single-asset. `POST /api/backtest` returns submitted config, summary metrics, equity/benchmark/drawdown/price series, trades, and richer risk analytics. `POST /api/grid-search` returns ranked research rows, failed combinations, heatmap data, and robustness warnings. `POST /api/walk-forward` returns folds, selected parameters, train/test metrics, degradation ratios, and aggregate validation warnings.
-The AI Builder endpoints return inert draft and compiled request JSON only. The frontend reviews and loads compiled payloads into existing forms; it does not execute them automatically.
+The AI Builder endpoints return inert draft and compiled request JSON only. The frontend reviews and loads compiled payloads into existing forms; it does not execute them automatically. Rule-based generated strategies arrive as a backend-validated `rule_spec`; the browser displays the rules but does not implement or edit the strategy logic.
 AI provider selection and API keys are handled only by the FastAPI backend. The browser never sends or receives provider credentials.
 
 ## Screenshot / GIF Workflow

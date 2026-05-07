@@ -53,3 +53,4 @@ What gets better, what gets worse, and what follow-up work may be needed?
 ## Index
 
 - [2026-05-06 - Backtest Lab remains an API client](2026-05-06-backtest-lab-api-client.md)
+- [2026-05-07 - AI strategies compile to a constrained rule DSL](2026-05-07-ai-rule-dsl-no-generated-code.md)

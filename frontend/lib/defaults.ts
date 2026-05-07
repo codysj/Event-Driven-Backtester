@@ -14,11 +14,13 @@ export const DEFAULT_BACKTEST_REQUEST: BacktestRequest = {
   parameters: {
     fast_window: 10,
     slow_window: 50
-  }
+  },
+  rule_spec: null
 };
 
 export const DEFAULT_GRID_SEARCH_REQUEST: GridSearchRequest = {
   ...DEFAULT_BACKTEST_REQUEST,
+  strategy: "momentum",
   parameter_grid: {
     fast_window: [5, 10, 15],
     slow_window: [30, 50, 80]
@@ -52,5 +54,11 @@ export const FALLBACK_STRATEGIES: StrategyMetadata[] = [
       { name: "window", type: "integer", default: 20, min: 1, label: "Window" },
       { name: "num_std", type: "number", default: 2, min: 0.1, label: "Standard Deviations" }
     ]
+  },
+  {
+    id: "rule_based",
+    name: "Generated Rule-Based Strategy",
+    description: "Runs a constrained AI Builder rule set. Use AI Builder to create or load the rule spec.",
+    parameters: []
   }
 ];

@@ -104,6 +104,7 @@ def compile_backtest_request(draft: StrategyDraft) -> BacktestRequest:
             **_base_payload(draft),
             strategy=_strategy_id(draft.strategy_kind),
             parameters=_parameters_for_single_run(draft),
+            rule_spec=draft.rule_spec,
         )
     except ValidationError as exc:
         raise DraftCompileError(_validation_error_text(exc)) from exc
@@ -185,6 +186,8 @@ def _strategy_id(strategy_kind: StrategyKind) -> StrategyId:
         return "momentum"
     if strategy_kind == StrategyKind.MEAN_REVERSION:
         return "mean_reversion"
+    if strategy_kind == StrategyKind.RULE_BASED:
+        return "rule_based"
     raise DraftCompileError(f"Unsupported strategy kind: {strategy_kind.value}.")
 
 
@@ -199,6 +202,8 @@ def _parameters_for_single_run(draft: StrategyDraft) -> dict[str, int | float]:
             "window": _required_number(draft.parameters, "window"),
             "num_std": _required_number(draft.parameters, "num_std"),
         }
+    if draft.strategy_kind == StrategyKind.RULE_BASED:
+        return {}
     raise DraftCompileError(f"Unsupported strategy kind: {draft.strategy_kind.value}.")
 
 

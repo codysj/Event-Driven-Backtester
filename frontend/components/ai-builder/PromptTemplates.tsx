@@ -2,6 +2,7 @@
 
 const templates = [
   "20/100 SMA crossover on AAPL",
+  "Buy AAPL when close crosses above the 50 day SMA and sell when close crosses below it",
   "Mean reversion on MSFT",
   "Optimize SMA windows",
   "Walk-forward validate momentum",

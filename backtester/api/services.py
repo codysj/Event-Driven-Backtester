@@ -47,7 +47,8 @@ from backtester.metrics import (
 )
 from backtester.portfolio import Trade
 from backtester.research import run_grid_search
-from backtester.strategy import MeanReversionStrategy, MomentumStrategy, Strategy
+from backtester.strategy import MeanReversionStrategy, MomentumStrategy, RuleBasedStrategy, Strategy
+from backtester.strategy.rule_schema import RuleBasedStrategySpec
 
 
 @dataclass
@@ -86,10 +87,20 @@ def available_strategies() -> list[StrategyMetadata]:
                 StrategyParameterSchema(name="num_std", type="number", default=2.0, min=0.1, label="Standard Deviations"),
             ],
         ),
+        StrategyMetadata(
+            id="rule_based",
+            name="Generated Rule-Based Strategy",
+            description="Runs a constrained AI Builder rule set. Use AI Builder to create or load the rule spec.",
+            parameters=[],
+        ),
     ]
 
 
-def build_strategy(strategy_id: str, parameters: dict[str, int | float]) -> Strategy:
+def build_strategy(
+    strategy_id: str,
+    parameters: dict[str, int | float],
+    rule_spec: RuleBasedStrategySpec | None = None,
+) -> Strategy:
     """Build a Strategy instance from API request parameters."""
     if strategy_id == "momentum":
         return MomentumStrategy(
@@ -101,6 +112,11 @@ def build_strategy(strategy_id: str, parameters: dict[str, int | float]) -> Stra
             window=int(parameters.get("window", 20)),
             num_std=float(parameters.get("num_std", 2.0)),
         )
+    if strategy_id == "rule_based":
+        if rule_spec is None:
+            msg = "rule_spec is required for rule_based strategy."
+            raise ValueError(msg)
+        return RuleBasedStrategy(rule_spec)
     msg = f"Unsupported strategy: {strategy_id}"
     raise ValueError(msg)
 
@@ -118,7 +134,7 @@ def run_backtest_from_request(request: BacktestRequest) -> BacktestResponse:
         position_size_method=request.position_size_method,
         position_size_value=request.position_size_value,
     )
-    strategy = build_strategy(request.strategy, request.parameters)
+    strategy = build_strategy(request.strategy, request.parameters, request.rule_spec)
     result = BacktestEngine(loader=loader, strategy=strategy, config=config).run()
     price_data = loader.fetch(config.ticker, config.start_date, config.end_date)
     benchmark = buy_and_hold_equity(price_data, config.initial_cash) if request.benchmark else None
@@ -136,6 +152,7 @@ def run_backtest_from_request(request: BacktestRequest) -> BacktestResponse:
             "position_size_value": config.position_size_value,
             "strategy": request.strategy,
             "parameters": request.parameters,
+            "rule_spec": request.rule_spec.model_dump(mode="json") if request.rule_spec is not None else None,
             "benchmark": request.benchmark,
         },
         summary=BacktestSummary(

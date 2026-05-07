@@ -23,6 +23,14 @@ from backtester.ai.schemas import (
     TargetMode,
 )
 from backtester.ai.validator import validate_strategy_draft
+from backtester.strategy.rule_schema import (
+    ConditionOperator,
+    ConditionSpec,
+    IndicatorName,
+    IndicatorSpec,
+    RuleBasedStrategySpec,
+    RuleSetSpec,
+)
 
 
 ProviderDraft: TypeAlias = StrategyDraft | Mapping[str, object]
@@ -90,6 +98,8 @@ class FakeStrategyDraftProvider:
         "broker",
         "eval",
         "exec",
+        "lambda",
+        "__",
         "import ",
         "subprocess",
         "shell command",
@@ -102,6 +112,7 @@ class FakeStrategyDraftProvider:
         "multi asset",
         "portfolio",
         "ignore previous",
+        "python",
         "output python code",
         "python code",
         "generate code",
@@ -128,6 +139,9 @@ class FakeStrategyDraftProvider:
                 status=StrategyDraftStatus.UNSUPPORTED,
             )
 
+        rule_based_draft = self._rule_based_draft(prompt)
+        if rule_based_draft is not None:
+            return rule_based_draft
         if "mean reversion" in lowered:
             return self._mean_reversion_draft(prompt)
         if "sma" in lowered or "crossover" in lowered or "moving average" in lowered:
@@ -172,6 +186,121 @@ class FakeStrategyDraftProvider:
             warnings=["Draft only. Review before compiling or running a backtest."],
             confidence=0.82,
             status=StrategyDraftStatus.READY,
+        )
+
+    def _rule_based_draft(self, prompt: str) -> StrategyDraft | None:
+        lowered = prompt.lower()
+        has_entry_exit_language = _has_rule_action(lowered, "buy", "enter") and _has_rule_action(
+            lowered,
+            "sell",
+            "exit",
+        )
+        if not has_entry_exit_language:
+            return None
+
+        if "sma" in lowered and ("crosses above" in lowered or "cross above" in lowered):
+            window = _extract_single_indicator_window(prompt, "SMA")
+            if window is None:
+                return self._rule_based_needs_clarification(prompt, "Could not identify the SMA window.")
+            return self._rule_based_ready(
+                prompt,
+                entry=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.CROSSES_ABOVE,
+                    right=IndicatorSpec(name=IndicatorName.SMA, window=window),
+                ),
+                exit_condition=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.CROSSES_BELOW,
+                    right=IndicatorSpec(name=IndicatorName.SMA, window=window),
+                ),
+            )
+
+        if "bollinger" in lowered and "lower" in lowered and "upper" in lowered:
+            window = _extract_single_indicator_window(prompt, "Bollinger") or _extract_window(prompt)
+            num_std = _extract_num_std(prompt)
+            if window is None or num_std is None:
+                return self._rule_based_needs_clarification(
+                    prompt,
+                    "Could not identify both Bollinger window and standard deviation band.",
+                )
+            return self._rule_based_ready(
+                prompt,
+                entry=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.LTE,
+                    right=IndicatorSpec(name=IndicatorName.BOLLINGER_LOWER, window=window, num_std=num_std),
+                ),
+                exit_condition=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.GTE,
+                    right=IndicatorSpec(name=IndicatorName.BOLLINGER_UPPER, window=window, num_std=num_std),
+                ),
+            )
+
+        if "rolling high" in lowered or "new high" in lowered or "breakout" in lowered:
+            window = _extract_single_indicator_window(prompt, "rolling high") or _extract_new_high_window(prompt)
+            if window is None:
+                return self._rule_based_needs_clarification(prompt, "Could not identify the rolling high window.")
+            exit_window = _extract_single_indicator_window(prompt, "SMA") or window
+            warnings = []
+            if "sell when" not in lowered and "exit when" not in lowered:
+                warnings.append("Exit rule was inferred as close crossing below the same-window SMA.")
+            return self._rule_based_ready(
+                prompt,
+                entry=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.GT,
+                    right=IndicatorSpec(name=IndicatorName.ROLLING_HIGH, window=window),
+                ),
+                exit_condition=ConditionSpec(
+                    left=_close_indicator(),
+                    operator=ConditionOperator.CROSSES_BELOW,
+                    right=IndicatorSpec(name=IndicatorName.SMA, window=exit_window),
+                ),
+                extra_warnings=warnings,
+            )
+
+        return None
+
+    def _rule_based_ready(
+        self,
+        prompt: str,
+        *,
+        entry: ConditionSpec,
+        exit_condition: ConditionSpec,
+        extra_warnings: list[str] | None = None,
+    ) -> StrategyDraft:
+        start_date, end_date = _extract_date_range(prompt)
+        warnings = [
+            "Rule-based draft only. Entry conditions use ALL logic; exit conditions use ANY logic.",
+            *(extra_warnings or []),
+        ]
+        return StrategyDraft(
+            target_mode=TargetMode.SINGLE_RUN,
+            ticker=_extract_ticker(prompt),
+            start_date=start_date,
+            end_date=end_date,
+            strategy_kind=StrategyKind.RULE_BASED,
+            rule_spec=RuleBasedStrategySpec(rules=RuleSetSpec(entry=[entry], exit=[exit_condition])),
+            assumptions=_date_assumptions(start_date, end_date),
+            warnings=warnings,
+            confidence=0.78,
+            status=StrategyDraftStatus.READY,
+        )
+
+    def _rule_based_needs_clarification(self, prompt: str, warning: str) -> StrategyDraft:
+        start_date, end_date = _extract_date_range(prompt)
+        return StrategyDraft(
+            target_mode=TargetMode.SINGLE_RUN,
+            ticker=_extract_ticker(prompt),
+            start_date=start_date,
+            end_date=end_date,
+            strategy_kind=StrategyKind.RULE_BASED,
+            assumptions=_date_assumptions(start_date, end_date),
+            warnings=[warning],
+            confidence=0.45,
+            status=StrategyDraftStatus.NEEDS_CLARIFICATION,
         )
 
     def _mean_reversion_draft(self, prompt: str) -> StrategyDraft:
@@ -582,6 +711,11 @@ def _target_mode_from_prompt(prompt: str) -> TargetMode:
     return TargetMode.SINGLE_RUN
 
 
+def _has_rule_action(lowered_prompt: str, *actions: str) -> bool:
+    action_pattern = "|".join(re.escape(action) for action in actions)
+    return bool(re.search(rf"\b(?:{action_pattern})\b.{{0,40}}\bwhen\b", lowered_prompt))
+
+
 def _contains_filesystem_path(prompt: str) -> bool:
     return bool(
         re.search(r"\b[A-Za-z]:\\", prompt)
@@ -615,6 +749,34 @@ def _extract_sma_windows(prompt: str) -> tuple[int | None, int | None]:
     if crossover_match is not None:
         return int(crossover_match.group(1)), int(crossover_match.group(2))
     return None, None
+
+
+def _close_indicator() -> IndicatorSpec:
+    return IndicatorSpec(name=IndicatorName.CLOSE)
+
+
+def _extract_single_indicator_window(prompt: str, indicator_label: str) -> int | None:
+    escaped = re.escape(indicator_label)
+    before_match = re.search(
+        rf"\b(\d{{1,4}})\s*(?:day|-day)?\s+{escaped}\b",
+        prompt,
+        re.IGNORECASE,
+    )
+    if before_match is not None:
+        return int(before_match.group(1))
+    after_match = re.search(
+        rf"\b{escaped}\s*(?:of\s+|window\s+)?(\d{{1,4}})\b",
+        prompt,
+        re.IGNORECASE,
+    )
+    if after_match is not None:
+        return int(after_match.group(1))
+    return None
+
+
+def _extract_new_high_window(prompt: str) -> int | None:
+    match = re.search(r"\b(\d{1,4})\s*(?:day|-day)?\s+(?:new\s+)?high\b", prompt, re.IGNORECASE)
+    return int(match.group(1)) if match is not None else None
 
 
 def _extract_window(prompt: str) -> int | None:

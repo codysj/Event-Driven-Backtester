@@ -7,9 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backtester.engine import PositionSizeMethod
+from backtester.strategy.rule_schema import RuleBasedStrategySpec
 
 
-StrategyId = Literal["momentum", "mean_reversion"]
+StrategyId = Literal["momentum", "mean_reversion", "rule_based"]
+ResearchStrategyId = Literal["momentum", "mean_reversion"]
 ParameterType = Literal["integer", "number"]
 OptimizationMetric = Literal[
     "total_return",
@@ -68,6 +70,7 @@ class BacktestRequest(BaseModel):
     position_size_value: float = Field(default=10_000.0, gt=0)
     benchmark: bool = True
     parameters: dict[str, int | float] = Field(default_factory=dict)
+    rule_spec: RuleBasedStrategySpec | None = None
 
     @field_validator("ticker")
     @classmethod
@@ -77,6 +80,19 @@ class BacktestRequest(BaseModel):
     @model_validator(mode="after")
     def validate_strategy_parameters(self) -> "BacktestRequest":
         params = self.parameters
+        if self.strategy == "rule_based":
+            if self.rule_spec is None:
+                msg = "rule_spec is required for rule_based strategy."
+                raise ValueError(msg)
+            if params:
+                msg = "rule_based strategy does not accept numeric parameters."
+                raise ValueError(msg)
+            return self
+
+        if self.rule_spec is not None:
+            msg = "rule_spec is only supported for rule_based strategy."
+            raise ValueError(msg)
+
         if self.strategy == "momentum":
             fast_window = int(params.get("fast_window", 10))
             slow_window = int(params.get("slow_window", 50))
@@ -107,13 +123,13 @@ class ResearchBaseRequest(BaseModel):
     ticker: str = Field(..., min_length=1)
     start_date: str = Field(..., min_length=1)
     end_date: str = Field(..., min_length=1)
-    strategy: StrategyId
     initial_cash: float = Field(default=100_000.0, gt=0)
     commission_rate: float = Field(default=0.001, ge=0)
     slippage_bps: float = Field(default=5.0, ge=0)
     position_size_method: PositionSizeMethod = PositionSizeMethod.FIXED_DOLLAR
     position_size_value: float = Field(default=10_000.0, gt=0)
     benchmark: bool = True
+    strategy: ResearchStrategyId
     parameter_grid: dict[str, list[int | float]] = Field(default_factory=dict)
     optimization_metric: OptimizationMetric = "sharpe_ratio"
 
@@ -300,7 +316,7 @@ class GridSearchResponse(BaseModel):
     """Grid-search response consumed by Backtest Lab."""
 
     config: dict[str, object]
-    strategy_id: StrategyId
+    strategy_id: ResearchStrategyId
     strategy_name: str
     optimization_metric: OptimizationMetric
     total_combinations: int
@@ -342,7 +358,7 @@ class WalkForwardResponse(BaseModel):
     """Walk-forward validation response consumed by Backtest Lab."""
 
     config: dict[str, object]
-    strategy_id: StrategyId
+    strategy_id: ResearchStrategyId
     strategy_name: str
     optimization_metric: OptimizationMetric
     folds: list[WalkForwardFold]
