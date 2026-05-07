@@ -38,7 +38,16 @@ Last documentation pass: 2026-05-06.
   - Benchmark equity
   - Win rate and profit factor
   - Trade summaries
-- Grid search for single-asset strategies.
+- Grid search for single-asset strategies, including API/service conversion, failed-combination preservation, heatmap-ready response data, and robustness warnings.
+- Walk-forward validation for single-asset strategies through FastAPI and Backtest Lab.
+- Richer risk analytics:
+  - rolling Sharpe
+  - rolling volatility
+  - rolling drawdown
+  - drawdown duration
+  - best/worst day
+  - monthly returns
+  - VaR/CVaR
 - Matplotlib chart helpers.
 - CLI:
   - `run`
@@ -47,26 +56,34 @@ Last documentation pass: 2026-05-06.
   - `GET /health`
   - `GET /api/strategies`
   - `POST /api/backtest`
+  - `POST /api/grid-search`
+  - `POST /api/walk-forward`
   - Configurable CORS origins through `BACKTESTER_CORS_ORIGINS`
 - Backtest Lab frontend:
   - Next.js 15 App Router, TypeScript, Tailwind CSS, Recharts.
   - Full-screen dark finance dashboard shell.
   - Sidebar, top run-context header, and sticky right configuration panel.
+  - Mode switcher for Single Run, Grid Search, and Walk-Forward workflows.
   - Single-asset backtest form with inline validation.
+  - Grid-search form with strategy parameter ranges, optimization metric, benchmark toggle, and top-N control.
+  - Grid-search leaderboard, best-row summary, robustness warnings, failed-combination display, two-parameter heatmap, CSV/config export, and selected-row handoff into a single run.
+  - Walk-forward form with train/test/step windows and strategy parameter grids.
+  - Walk-forward fold table, train/test metric comparison, degradation ratios, aggregate warnings, and parameter stability.
   - API health indicator and strategy metadata loading.
   - Empty, loading, and error states.
   - KPI cards.
   - Equity chart with optional buy-and-hold benchmark.
   - Drawdown chart.
   - Summary, Trades, Metrics, and Parameters tabs.
+  - Risk tab and frontend exports for trades CSV, metrics JSON, config JSON, and grid-search CSV.
   - Reproducibility view for submitted config and strategy parameters.
 - Examples, benchmark scripts, tests, mypy config, Python CI, and frontend CI checks.
 
 ## Known Incomplete Areas
 
-- Backtest Lab only supports single-asset backtests.
-- FastAPI only exposes a single-asset `POST /api/backtest` endpoint.
+- Backtest Lab research workflows remain single-asset only.
 - CLI does not expose multi-asset workflows.
+- Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
 - No auth, database, broker integration, paid data feed, or live trading.
 - Benchmark docs include measured optimized synthetic numbers, but baseline speedup is not measured.
@@ -76,6 +93,7 @@ Last documentation pass: 2026-05-06.
 ## Known Bugs Or TODOs
 
 - `docs/benchmark_results.md` still has TODOs for pre-optimization baseline measurement and speedup comparison.
+- No committed Backtest Lab screenshot/GIF asset yet; screenshot regeneration workflow is documented.
 
 ## Recent Assumptions From Repo State
 
@@ -90,7 +108,7 @@ Last documentation pass: 2026-05-06.
 ## Recommended Next Tasks
 
 - Decide whether to expose multi-asset runs through FastAPI, CLI, and Backtest Lab.
-- Add API tests around service conversion using fake loader/service injection to avoid network calls.
+- Add richer walk-forward visuals if the table-first workflow needs more portfolio polish.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
 - Measure a pre-optimization baseline for `docs/benchmark_results.md`.
 - Keep the frontend dependency audit clean during future upgrades.
@@ -111,6 +129,11 @@ Results from this pass:
 
 - `python -m pytest`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `python -m mypy backtester`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
+- `python -m pytest --cov=backtester`: not run successfully for the same reason; no Python launcher or local `venv` was available in this workspace.
+- `cmd /c npm run lint` from `frontend/`: success.
+- `cmd /c npm run typecheck` from `frontend/`: success. `next typegen` generated route types and `tsc --noEmit` passed.
+- `cmd /c npm run build` from `frontend/`: success. Next.js 15.5.15 production build compiled successfully and generated 4 static pages.
+- `cmd /c npm audit` from `frontend/`: success after rerunning outside the sandbox to allow registry access. `found 0 vulnerabilities`.
 - `cmd /c npm install next@15.5.15 postcss@^8.5.10` from `frontend/`: success. Upgraded Next and PostCSS without `npm audit fix --force`.
 - `cmd /c npm install` from `frontend/`: success. Refreshed install state after adding the scoped PostCSS override.
 - `cmd /c npm update postcss` from `frontend/`: success. Applied the override so Next's nested PostCSS resolved to 8.5.10.

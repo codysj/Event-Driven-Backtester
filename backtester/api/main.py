@@ -7,8 +7,22 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from backtester.api.schemas import BacktestRequest, BacktestResponse, HealthResponse, StrategiesResponse
-from backtester.api.services import available_strategies, run_backtest_from_request
+from backtester.api.schemas import (
+    BacktestRequest,
+    BacktestResponse,
+    GridSearchRequest,
+    GridSearchResponse,
+    HealthResponse,
+    StrategiesResponse,
+    WalkForwardRequest,
+    WalkForwardResponse,
+)
+from backtester.api.services import (
+    available_strategies,
+    run_backtest_from_request,
+    run_grid_search_from_request,
+    run_walk_forward_from_request,
+)
 
 
 DEFAULT_CORS_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
@@ -56,4 +70,28 @@ def run_backtest(request: BacktestRequest) -> BacktestResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         detail = f"Could not run backtest for {request.ticker} between {request.start_date} and {request.end_date}."
+        raise HTTPException(status_code=500, detail=detail) from exc
+
+
+@app.post("/api/grid-search", response_model=GridSearchResponse)
+def run_grid_search(request: GridSearchRequest) -> GridSearchResponse:
+    """Run a parameter grid search from a validated request body."""
+    try:
+        return run_grid_search_from_request(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = f"Could not run grid search for {request.ticker} between {request.start_date} and {request.end_date}."
+        raise HTTPException(status_code=500, detail=detail) from exc
+
+
+@app.post("/api/walk-forward", response_model=WalkForwardResponse)
+def run_walk_forward(request: WalkForwardRequest) -> WalkForwardResponse:
+    """Run walk-forward validation from a validated request body."""
+    try:
+        return run_walk_forward_from_request(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        detail = f"Could not run walk-forward validation for {request.ticker} between {request.start_date} and {request.end_date}."
         raise HTTPException(status_code=500, detail=detail) from exc

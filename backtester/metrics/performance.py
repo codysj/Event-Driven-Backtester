@@ -87,6 +87,96 @@ def max_drawdown(equity_curve: pd.Series) -> float:
     return float(min_drawdown)
 
 
+def rolling_sharpe_ratio(
+    returns: pd.Series,
+    window: int = 63,
+    risk_free_rate: float = 0.0,
+) -> pd.Series:
+    """Return annualized rolling Sharpe ratios for a return series."""
+    if returns.empty:
+        return pd.Series(index=returns.index, dtype="float64", name="rolling_sharpe")
+    daily_rf = risk_free_rate / 252
+    excess = returns - daily_rf
+    rolling_std = excess.rolling(window).std()
+    values = (excess.rolling(window).mean() / rolling_std) * math.sqrt(252)
+    return pd.Series(values.replace([float("inf"), float("-inf")], 0.0).fillna(0.0), index=returns.index, name="rolling_sharpe")
+
+
+def rolling_volatility(returns: pd.Series, window: int = 63) -> pd.Series:
+    """Return annualized rolling volatility for a return series."""
+    if returns.empty:
+        return pd.Series(index=returns.index, dtype="float64", name="rolling_volatility")
+    values = returns.rolling(window).std() * math.sqrt(252)
+    return pd.Series(values.fillna(0.0), index=returns.index, name="rolling_volatility")
+
+
+def rolling_drawdown(equity_curve: pd.Series, window: int = 63) -> pd.Series:
+    """Return drawdown from the rolling window high as negative decimals."""
+    if equity_curve.empty:
+        return pd.Series(index=equity_curve.index, dtype="float64", name="rolling_drawdown")
+    rolling_max = equity_curve.rolling(window, min_periods=1).max()
+    safe_rolling_max = rolling_max.mask(rolling_max == 0)
+    values = ((equity_curve - safe_rolling_max) / safe_rolling_max).fillna(0.0)
+    return pd.Series(values, index=equity_curve.index, name="rolling_drawdown")
+
+
+def drawdown_duration_days(equity_curve: pd.Series) -> int:
+    """Return the longest consecutive number of bars spent below a prior high."""
+    if equity_curve.empty:
+        return 0
+    drawdown = rolling_drawdown(equity_curve, window=len(equity_curve))
+    longest = 0
+    current = 0
+    for value in drawdown:
+        if float(value) < 0:
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return longest
+
+
+def best_worst_day(returns: pd.Series) -> tuple[float, float]:
+    """Return best and worst single-period returns."""
+    if returns.empty:
+        return (0.0, 0.0)
+    return (float(returns.max()), float(returns.min()))
+
+
+def monthly_returns(equity_curve: pd.Series) -> pd.DataFrame:
+    """Return calendar monthly returns with year, month, and return columns."""
+    if len(equity_curve) < 2:
+        return pd.DataFrame(columns=["year", "month", "return"])
+    monthly_equity = equity_curve.resample("ME").last()
+    monthly = monthly_equity.pct_change().dropna()
+    return pd.DataFrame(
+        {
+            "year": monthly.index.year.astype(int),
+            "month": monthly.index.month.astype(int),
+            "return": monthly.to_numpy(dtype=float),
+        }
+    )
+
+
+def value_at_risk(returns: pd.Series, confidence: float = 0.95) -> float:
+    """Return historical Value at Risk as a negative return threshold."""
+    if returns.empty:
+        return 0.0
+    quantile = 1 - confidence
+    return float(returns.quantile(quantile))
+
+
+def conditional_value_at_risk(returns: pd.Series, confidence: float = 0.95) -> float:
+    """Return average return beyond the historical VaR threshold."""
+    if returns.empty:
+        return 0.0
+    threshold = value_at_risk(returns, confidence=confidence)
+    tail = returns[returns <= threshold]
+    if tail.empty:
+        return threshold
+    return float(tail.mean())
+
+
 def win_rate(trades: list[Trade]) -> float:
     """Return the share of sequential buy/sell pairs with sell price > buy price."""
     pairs = _paired_trades(trades)

@@ -13,6 +13,7 @@ type TopBarProps = {
   isLoading: boolean;
   onRun: () => void;
   onReset: () => void;
+  actionLabel?: string;
 };
 
 function StatusIndicator({ status }: { status: ApiStatus }) {
@@ -27,7 +28,7 @@ function StatusIndicator({ status }: { status: ApiStatus }) {
   );
 }
 
-export function TopBar({ request, strategies, status, isLoading, onRun, onReset }: TopBarProps) {
+export function TopBar({ request, strategies, status, isLoading, onRun, onReset, actionLabel = "Run Backtest" }: TopBarProps) {
   const strategyName = strategies.find((strategy) => strategy.id === request.strategy)?.name ?? request.strategy;
 
   return (
@@ -85,7 +86,7 @@ export function TopBar({ request, strategies, status, isLoading, onRun, onReset 
             className="inline-flex items-center gap-2 rounded-lg bg-lab-blue px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Play size={15} />
-            {isLoading ? "Running..." : "Run Backtest"}
+            {isLoading ? "Running..." : actionLabel}
           </button>
         </div>
       </div>

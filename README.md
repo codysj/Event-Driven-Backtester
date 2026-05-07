@@ -1,6 +1,6 @@
 # Backtester
 
-Backtester is an event-driven Python backtesting engine for researching trading strategies over historical OHLCV data. It includes a FastAPI wrapper and a polished Next.js dashboard called **Backtest Lab** for running single-asset simulations from the browser.
+Backtester is an event-driven Python backtesting engine for researching trading strategies over historical OHLCV data. It includes a FastAPI wrapper and a polished Next.js dashboard called **Backtest Lab** for running single-asset simulations, grid searches, and walk-forward validation from the browser.
 
 The project is built as a portfolio-quality demonstration of backtesting architecture, API integration, and financial dashboard UX. It is a research tool only, not a brokerage app or investment advisor.
 
@@ -29,7 +29,9 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
   - Alpha, beta, excess return, and information ratio when a benchmark is supplied
 - Buy-and-hold benchmark equity generation.
 - Trade-level analytics.
-- Single-asset grid search.
+- Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
+- Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
+- Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
 - Matplotlib chart helpers.
 - CLI commands for single-asset backtests and grid searches.
 - FastAPI API for local app integration.
@@ -72,9 +74,9 @@ python -m pip install -r requirements.txt
 Run Python validation:
 
 ```bash
-pytest
-mypy backtester
-pytest --cov=backtester
+python -m pytest
+python -m mypy backtester
+python -m pytest --cov=backtester
 ```
 
 Start the FastAPI backend:
@@ -113,6 +115,7 @@ Current dashboard capabilities:
 - Full-screen app shell with sidebar navigation, compact run context header, and sticky configuration panel.
 - API health indicator based on `GET /health`.
 - Strategy metadata loaded from `GET /api/strategies`, with local fallbacks for offline form rendering.
+- Mode switcher for Single Run, Grid Search, and Walk-Forward workflows.
 - Single-asset backtest form for:
   - Ticker
   - Start and end dates
@@ -130,9 +133,15 @@ Current dashboard capabilities:
 - Drawdown chart with percent axis and negative drawdown display.
 - Tabs for Summary, Trades, Metrics, and Parameters.
 - Reproducibility view showing the submitted config and strategy parameters.
+- Risk tab with richer server-computed analytics and monthly returns.
+- Frontend exports for trades CSV, metrics JSON, reproducibility config JSON, and grid-search CSV.
+- Grid-search form for ticker/date range, strategy parameter ranges, costs/sizing, benchmark toggle, optimization metric, and top-N results.
+- Grid-search results with leaderboard, best row, robustness warnings, failed combinations, two-parameter heatmap, exports, and a "Run selected config" action that promotes a row into the single-run workflow.
+- Walk-forward form for train/test/step windows and strategy parameter grids.
+- Walk-forward results with fold table, selected parameters per fold, train/test metric comparison, degradation ratio, aggregate warnings, and parameter stability.
 - Research disclaimer: not investment advice.
 
-The frontend does not implement backtesting logic in TypeScript. It submits requests to FastAPI and renders the returned metrics, series, trades, and config.
+The frontend does not implement backtesting, grid search, walk-forward optimization, portfolio accounting, benchmark math, or performance metrics in TypeScript. It submits requests to FastAPI and renders the returned metrics, series, trades, research rows, warnings, and config.
 
 ## API
 
@@ -147,7 +156,15 @@ Endpoints:
 - `POST /api/backtest`
   - Runs a single-asset backtest through the Python engine.
   - Request fields include ticker, date range, strategy, initial cash, commission, slippage, sizing method/value, benchmark toggle, and strategy parameters.
-  - Response includes config, summary metrics, equity/benchmark/drawdown/price series, and executed trades.
+  - Response includes config, summary metrics, equity/benchmark/drawdown/price series, executed trades, and richer risk analytics.
+- `POST /api/grid-search`
+  - Runs single-asset parameter sweeps through the Python research layer.
+  - Request fields include base backtest config, strategy id, parameter grid, optimization metric, benchmark toggle, and max results.
+  - Response includes ranked rows, failed combinations, best parameters, heatmap-ready points for two varied numeric parameters, and deterministic robustness analysis.
+- `POST /api/walk-forward`
+  - Runs single-asset rolling train/test validation.
+  - Request fields include base backtest config, strategy id, parameter grid, optimization metric, and train/test/step bars.
+  - Response includes folds, selected train parameters, out-of-sample test metrics, degradation ratios, aggregate warnings, and parameter stability.
 
 By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
 
@@ -177,8 +194,10 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
    ```
 
 3. Open `http://localhost:3000`.
-4. Use the default AAPL Momentum SMA setup or adjust the config.
-5. Run the backtest and inspect equity, drawdown, trades, metrics, and parameters.
+4. Use the default AAPL Momentum SMA setup or switch between Single Run, Grid Search, and Walk-Forward modes.
+5. Run a backtest and inspect equity, drawdown, trades, risk, metrics, and parameters.
+6. Run grid search to compare parameter combinations, inspect robustness warnings, export CSV, and promote a selected row into a single backtest.
+7. Run walk-forward validation to compare train and out-of-sample test performance by fold.
 
 yfinance may require network access unless the requested data is already cached.
 
@@ -259,7 +278,13 @@ Generate example chart PNGs:
 python examples/generate_charts.py
 ```
 
-Backtest Lab screenshot assets are not currently committed. Regenerate dashboard screenshots on demand for portfolio materials: start the API and frontend, run the default AAPL backtest, and capture the dashboard at desktop width. Keep generated screenshots small and intentional if they are later committed.
+Backtest Lab screenshot assets are not currently committed. Regenerate dashboard screenshots or GIFs on demand for portfolio materials:
+
+1. Start the API and frontend.
+2. Capture the Single Run default AAPL view after a completed run.
+3. Capture Grid Search after the default parameter sweep and the leaderboard/heatmap are visible.
+4. Capture Walk-Forward after the fold table and aggregate summary are visible.
+5. Keep generated screenshots small and intentional if they are later committed.
 
 ## Testing And CI
 
@@ -276,8 +301,9 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 
 ## Known Limitations
 
-- Backtest Lab and `POST /api/backtest` currently support single-asset backtests only.
+- Backtest Lab research workflows are still single-asset only.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
+- Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
 - No authentication.
 - No database or saved run persistence.
 - No broker integration.

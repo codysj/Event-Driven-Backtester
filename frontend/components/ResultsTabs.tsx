@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { BacktestResponse } from "../lib/types";
+import { exportBacktestMetricsJson, exportBacktestTradesCsv, exportConfigJson } from "../lib/exports";
 import { formatCurrency, formatDecimal, formatNumber, formatPercent } from "./formatters";
 import { TradeTable } from "./TradeTable";
 
@@ -9,12 +10,13 @@ type ResultsTabsProps = {
   result: BacktestResponse;
 };
 
-type TabId = "summary" | "trades" | "metrics" | "parameters";
+type TabId = "summary" | "trades" | "metrics" | "risk" | "parameters";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "summary", label: "Summary" },
   { id: "trades", label: "Trades" },
   { id: "metrics", label: "Metrics" },
+  { id: "risk", label: "Risk" },
   { id: "parameters", label: "Parameters" }
 ];
 
@@ -96,6 +98,16 @@ export function ResultsTabs({ result }: ResultsTabsProps) {
     return baseRows;
   }, [result.config]);
 
+  const riskRows = result.risk
+    ? [
+        { label: "Best Day", value: formatPercent(result.risk.best_day), helper: "Best daily portfolio return." },
+        { label: "Worst Day", value: formatPercent(result.risk.worst_day), helper: "Worst daily portfolio return." },
+        { label: "Drawdown Duration", value: `${result.risk.drawdown_duration_days} bars`, helper: "Longest stretch below a prior high." },
+        { label: "VaR 95", value: formatPercent(result.risk.value_at_risk_95), helper: "Historical 5th percentile daily return." },
+        { label: "CVaR 95", value: formatPercent(result.risk.conditional_value_at_risk_95), helper: "Average daily return beyond VaR." }
+      ]
+    : [];
+
   return (
     <section className="rounded-xl border border-lab-border bg-lab-card p-3">
       <div className="flex flex-wrap gap-2 border-b border-lab-border pb-3">
@@ -128,7 +140,61 @@ export function ResultsTabs({ result }: ResultsTabsProps) {
 
         {activeTab === "trades" ? <TradeTable trades={result.trades} /> : null}
         {activeTab === "metrics" ? <KeyValueTable rows={metricsRows} /> : null}
+        {activeTab === "risk" ? (
+          <div className="space-y-4">
+            <KeyValueTable rows={riskRows} />
+            <div className="overflow-hidden rounded-xl border border-lab-border bg-lab-surface">
+              <div className="border-b border-lab-border px-4 py-3">
+                <h3 className="text-sm font-semibold text-lab-text">Monthly Returns</h3>
+              </div>
+              <div className="max-h-[320px] overflow-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="sticky top-0 z-10 border-b border-lab-border bg-lab-card text-xs uppercase tracking-[0.16em] text-lab-muted">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Year</th>
+                      <th className="px-4 py-3 font-medium">Month</th>
+                      <th className="px-4 py-3 text-right font-medium">Return</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-lab-border/70">
+                    {(result.risk?.monthly_returns ?? []).map((row) => (
+                      <tr key={`${row.year}-${row.month}`} className="bg-lab-surface">
+                        <td className="px-4 py-3 font-mono-finance text-lab-secondary">{row.year}</td>
+                        <td className="px-4 py-3 font-mono-finance text-lab-secondary">{row.month}</td>
+                        <td className="px-4 py-3 text-right font-mono-finance text-lab-text">{formatPercent(row.return)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {activeTab === "parameters" ? <KeyValueTable rows={configRows} /> : null}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-lab-border pt-3">
+        <button
+          type="button"
+          onClick={() => exportBacktestTradesCsv(result)}
+          className="rounded-lg border border-lab-border bg-lab-surface px-3 py-2 text-sm text-lab-secondary transition hover:border-lab-blue hover:text-lab-text"
+        >
+          Trades CSV
+        </button>
+        <button
+          type="button"
+          onClick={() => exportBacktestMetricsJson(result)}
+          className="rounded-lg border border-lab-border bg-lab-surface px-3 py-2 text-sm text-lab-secondary transition hover:border-lab-blue hover:text-lab-text"
+        >
+          Metrics JSON
+        </button>
+        <button
+          type="button"
+          onClick={() => exportConfigJson(result.config)}
+          className="rounded-lg border border-lab-border bg-lab-surface px-3 py-2 text-sm text-lab-secondary transition hover:border-lab-blue hover:text-lab-text"
+        >
+          Config JSON
+        </button>
       </div>
     </section>
   );

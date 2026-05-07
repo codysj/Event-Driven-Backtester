@@ -10,7 +10,7 @@ import pandas as pd
 
 from backtester.data.loader import DataLoader
 from backtester.engine import BacktestConfig, BacktestEngine
-from backtester.metrics import generate_report
+from backtester.metrics import buy_and_hold_equity, generate_report
 from backtester.strategy import Strategy
 
 
@@ -35,6 +35,7 @@ def run_grid_search(
     risk_free_rate: float = 0.0,
     sort_by: str = "sharpe_ratio",
     ascending: bool = False,
+    benchmark: bool = False,
 ) -> pd.DataFrame:
     """Run all parameter combinations and return a sorted result DataFrame."""
     rows: list[dict[str, object]] = []
@@ -43,13 +44,22 @@ def run_grid_search(
         try:
             strategy = strategy_factory(**params)
             result = BacktestEngine(loader=loader, strategy=strategy, config=config).run()
-            report = generate_report(result, risk_free_rate=risk_free_rate)
+            price_data = loader.fetch(config.ticker, config.start_date, config.end_date)
+            benchmark_equity = buy_and_hold_equity(price_data, config.initial_cash) if benchmark else None
+            report = generate_report(result, risk_free_rate=risk_free_rate, benchmark_equity=benchmark_equity)
             row.update(
                 {
                     "final_value": result.final_value,
                     "total_return": report["total_return"],
+                    "annualized_return": report["annualized_return"],
                     "sharpe_ratio": report["sharpe_ratio"],
+                    "sortino_ratio": report["sortino_ratio"],
                     "max_drawdown": report["max_drawdown"],
+                    "benchmark_total_return": report.get("benchmark_total_return"),
+                    "excess_total_return": report.get("excess_total_return"),
+                    "information_ratio": report.get("information_ratio"),
+                    "profit_factor": report["profit_factor"],
+                    "win_rate": report["win_rate"],
                     "total_trades": len(result.trades),
                     "error": "",
                 }
@@ -59,8 +69,15 @@ def run_grid_search(
                 {
                     "final_value": float("nan"),
                     "total_return": float("nan"),
+                    "annualized_return": float("nan"),
                     "sharpe_ratio": float("nan"),
+                    "sortino_ratio": float("nan"),
                     "max_drawdown": float("nan"),
+                    "benchmark_total_return": float("nan"),
+                    "excess_total_return": float("nan"),
+                    "information_ratio": float("nan"),
+                    "profit_factor": float("nan"),
+                    "win_rate": float("nan"),
                     "total_trades": 0,
                     "error": str(exc),
                 }

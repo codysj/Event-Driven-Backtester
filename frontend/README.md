@@ -1,8 +1,8 @@
 # Backtest Lab Frontend
 
-Backtest Lab is the Next.js dashboard for the Backtester project. It is a local research UI for running single-asset backtests through the FastAPI API and inspecting equity, drawdown, metrics, trades, and submitted parameters.
+Backtest Lab is the Next.js dashboard for the Backtester project. It is a local research UI for running single-asset backtests, grid searches, and walk-forward validation through the FastAPI API.
 
-The frontend does not implement backtesting logic. It calls the Python API and renders the returned response.
+The frontend does not implement backtesting, grid-search, walk-forward, metrics, portfolio, or benchmark logic. It calls the Python API and renders the returned response.
 
 ## Setup
 
@@ -65,7 +65,7 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ## UI Structure
 
 - `app/page.tsx`
-  - Owns dashboard state, API health/strategy loading, request validation, and backtest submission.
+  - Owns dashboard state, API health/strategy loading, mode switching, request validation, and API submissions.
 - `app/globals.css`
   - Dark dashboard color variables and shared font stacks.
 - `components/AppShell.tsx`
@@ -76,14 +76,18 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
   - Current run context, API status, reset/default controls, docs/GitHub links.
 - `components/BacktestForm.tsx`
   - Controlled single-asset backtest form with inline validation display.
+- `components/ResearchForms.tsx`
+  - Controlled grid-search and walk-forward forms with range inputs, optimization metrics, and fold windows.
 - `components/ResultsDashboard.tsx`
   - Run hero, status, KPI cards, charts, and result tabs.
+- `components/ResearchResults.tsx`
+  - Grid-search leaderboard, robustness warnings, heatmap, failed combinations, selected-config handoff, and walk-forward fold table.
 - `components/EquityChart.tsx`
   - Recharts equity curve with optional benchmark series.
 - `components/DrawdownChart.tsx`
   - Recharts drawdown chart with percent axis.
 - `components/ResultsTabs.tsx`
-  - Summary, Trades, Metrics, and Parameters tabs.
+  - Summary, Trades, Metrics, Risk, and Parameters tabs with export actions.
 - `components/TradeTable.tsx`
   - Executed trades table.
 - `components/EmptyState.tsx`, `ErrorState.tsx`, `LoadingSkeleton.tsx`
@@ -91,9 +95,11 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 - `components/formatters.ts`
   - Shared formatting helpers.
 - `lib/api.ts`
-  - API client for `GET /health`, `GET /api/strategies`, and `POST /api/backtest`.
+  - API client for `GET /health`, `GET /api/strategies`, `POST /api/backtest`, `POST /api/grid-search`, and `POST /api/walk-forward`.
 - `lib/types.ts`
   - TypeScript request/response shapes matching the FastAPI schema.
+- `lib/exports.ts`
+  - Frontend CSV/JSON downloads from returned API data.
 - `lib/defaults.ts`
   - Default AAPL Momentum SMA request and fallback strategy metadata.
 - `lib/validation.ts`
@@ -106,5 +112,17 @@ Backtest Lab assumes these API endpoints exist:
 - `GET /health`
 - `GET /api/strategies`
 - `POST /api/backtest`
+- `POST /api/grid-search`
+- `POST /api/walk-forward`
 
-`POST /api/backtest` is single-asset. It returns submitted config, summary metrics, equity/benchmark/drawdown/price series, and trades. Multi-asset runs are supported in Python but not currently exposed to this frontend.
+All current browser workflows are single-asset. `POST /api/backtest` returns submitted config, summary metrics, equity/benchmark/drawdown/price series, trades, and richer risk analytics. `POST /api/grid-search` returns ranked research rows, failed combinations, heatmap data, and robustness warnings. `POST /api/walk-forward` returns folds, selected parameters, train/test metrics, degradation ratios, and aggregate validation warnings.
+
+## Screenshot / GIF Workflow
+
+For portfolio assets, start the API and frontend, then capture:
+
+- Single Run after the default AAPL backtest completes.
+- Grid Search after the default sweep shows the leaderboard and heatmap.
+- Walk-Forward after the fold table and aggregate summary render.
+
+Keep committed assets small and intentional.

@@ -23,7 +23,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `backtester/metrics/`
   - Computes returns, drawdowns, Sharpe/Sortino, alpha/beta, information ratio, profit factor, benchmark equity, and trade-level summaries.
 - `backtester/research/`
-  - Runs parameter grid searches and returns sorted `pandas.DataFrame` results.
+  - Runs parameter grid searches and returns sorted `pandas.DataFrame` results, including failed-combination rows for research diagnostics.
 - `backtester/viz/`
   - Matplotlib chart helpers for equity, drawdown, trades, and strategy comparison.
 - `backtester/api/`
@@ -48,9 +48,12 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `MultiAssetBacktestEngine.run()` runs multiple tickers with a `MultiAssetStrategy`.
 - `Portfolio.execute_order()` applies slippage/commission and mutates cash/positions on accepted trades.
 - `generate_report()` computes primary performance metrics and optional benchmark comparison keys.
+- Additional metrics helpers compute rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR from first principles.
 - `buy_and_hold_equity()` creates a benchmark equity curve for comparison.
 - `run_grid_search()` expands a parameter grid, runs backtests, and records errors per combination.
 - FastAPI `POST /api/backtest` wraps a single-asset backtest for Backtest Lab.
+- FastAPI `POST /api/grid-search` wraps single-asset parameter sweeps, heatmap data, and deterministic robustness analysis.
+- FastAPI `POST /api/walk-forward` wraps rolling train/test validation using grid-search-selected parameters per fold.
 - Frontend `frontend/lib/api.ts` isolates API calls from UI components.
 - Frontend `frontend/lib/validation.ts` performs inline form validation before POST requests.
 
@@ -84,6 +87,26 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
    - Price series
    - Executed trades
 9. Frontend renders KPI cards, Recharts equity/drawdown charts, result tabs, trades, metrics, and parameters.
+
+### Browser Grid Search Flow
+
+1. User switches Backtest Lab into Grid Search mode.
+2. Frontend validates ticker/date range, base portfolio settings, optimization metric, and strategy parameter ranges for UX.
+3. Browser submits `GridSearchRequest` to `POST /api/grid-search`.
+4. `backtester/api/services.py` builds a base `BacktestConfig`, strategy factory, and parameter grid.
+5. `backtester/research/run_grid_search()` expands combinations and runs the Python engine for each one.
+6. The service converts the result frame into ranked JSON rows, failed-combination rows, best parameters, heatmap points when two numeric parameters vary, and deterministic robustness warnings.
+7. Frontend renders the leaderboard, heatmap, robustness panel, failed combinations, exports, and a "Run selected config" action.
+
+### Browser Walk-Forward Flow
+
+1. User switches Backtest Lab into Walk-Forward mode.
+2. Frontend validates base config, parameter grid, optimization metric, and train/test/step bar windows.
+3. Browser submits `WalkForwardRequest` to `POST /api/walk-forward`.
+4. The API fetches the full single-asset price window once and slices train/test folds server-side.
+5. Each train fold runs grid search; the best train parameters are then evaluated on the following out-of-sample test fold.
+6. The service returns selected parameters, train/test metrics, degradation ratios, fold warnings, aggregate averages, parameter stability, and overall warnings.
+7. Frontend renders a table-first validation view. It does not optimize, rank, or compute metrics in TypeScript.
 
 ### Multi-Asset Python Flow
 
@@ -124,6 +147,39 @@ FastAPI app: `backtester/api/main.py`
     - `series.drawdown`
     - `series.price`
     - `trades`
+    - `risk`
+- `POST /api/grid-search`
+  - Request schema:
+    - base single-asset config fields
+    - `strategy`
+    - `parameter_grid`
+    - `optimization_metric`
+    - `max_results`
+  - Response schema:
+    - `config`
+    - `strategy_id`
+    - `strategy_name`
+    - `optimization_metric`
+    - `total_combinations`
+    - `results`
+    - `failed_combinations`
+    - `best_parameters`
+    - `best_row`
+    - `heatmap`
+    - `analysis`
+- `POST /api/walk-forward`
+  - Request schema:
+    - base single-asset config fields
+    - `strategy`
+    - `parameter_grid`
+    - `optimization_metric`
+    - `train_window_bars`
+    - `test_window_bars`
+    - `step_bars`
+  - Response schema:
+    - `config`
+    - `folds`
+    - `summary`
 
 The API normalizes ticker case and validates strategy parameters with Pydantic.
 
@@ -135,14 +191,16 @@ Main component groups:
 
 - `AppShell`, `Sidebar`, `TopBar`
   - Full-screen application frame and run context.
-- `BacktestForm`
-  - Controlled right-side configuration panel.
+- `BacktestForm`, `GridSearchForm`, `WalkForwardForm`
+  - Controlled right-side configuration panels for single-run and research workflows.
 - `ResultsDashboard`
   - Run hero, KPI cards, chart stack, and tab orchestration.
+- `GridSearchResults`, `WalkForwardResults`
+  - Research result views for leaderboard, heatmap, robustness warnings, fold tables, and export actions.
 - `EquityChart`, `DrawdownChart`
   - Recharts charts with dark financial styling and custom tooltips.
 - `ResultsTabs`, `TradeTable`
-  - Summary, trades, metrics, and parameters views.
+  - Summary, trades, metrics, richer risk analytics, exports, and parameters views.
 - `EmptyState`, `LoadingSkeleton`, `ErrorState`
   - Non-happy-path dashboard states.
 - `formatters`
@@ -179,6 +237,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Cash is rounded to cents after trades; production-grade accounting would likely use `Decimal`.
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
+- Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

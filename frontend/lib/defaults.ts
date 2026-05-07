@@ -1,4 +1,4 @@
-import type { BacktestRequest, StrategyMetadata } from "./types";
+import type { BacktestRequest, GridSearchRequest, StrategyMetadata, WalkForwardRequest } from "./types";
 
 export const DEFAULT_BACKTEST_REQUEST: BacktestRequest = {
   ticker: "AAPL",
@@ -15,6 +15,23 @@ export const DEFAULT_BACKTEST_REQUEST: BacktestRequest = {
     fast_window: 10,
     slow_window: 50
   }
+};
+
+export const DEFAULT_GRID_SEARCH_REQUEST: GridSearchRequest = {
+  ...DEFAULT_BACKTEST_REQUEST,
+  parameter_grid: {
+    fast_window: [5, 10, 15],
+    slow_window: [30, 50, 80]
+  },
+  optimization_metric: "sharpe_ratio",
+  max_results: 25
+};
+
+export const DEFAULT_WALK_FORWARD_REQUEST: WalkForwardRequest = {
+  ...DEFAULT_GRID_SEARCH_REQUEST,
+  train_window_bars: 252,
+  test_window_bars: 63,
+  step_bars: 63
 };
 
 export const FALLBACK_STRATEGIES: StrategyMetadata[] = [

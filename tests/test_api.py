@@ -8,7 +8,11 @@ from backtester.api.schemas import (
     BacktestResponse,
     BacktestSeries,
     BacktestSummary,
+    GridSearchResponse,
+    RobustnessAnalysis,
     SeriesPoint,
+    WalkForwardResponse,
+    WalkForwardSummary,
 )
 
 
@@ -98,3 +102,84 @@ def test_invalid_strategy_returns_validation_error() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_grid_search_endpoint_uses_service_layer(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def fake_run_grid_search_from_request(request):  # type: ignore[no-untyped-def]
+        return GridSearchResponse(
+            config={"ticker": request.ticker},
+            strategy_id=request.strategy,
+            strategy_name="Momentum SMA Crossover",
+            optimization_metric=request.optimization_metric,
+            total_combinations=0,
+            results=[],
+            failed_combinations=[],
+            best_parameters=None,
+            best_row=None,
+            heatmap=[],
+            analysis=RobustnessAnalysis(
+                robustness_score=0,
+                warnings=[],
+                notes=[],
+                nearby_parameter_stability=None,
+                trade_count_flags=[],
+                drawdown_flags=[],
+                overfit_risk_flags=[],
+            ),
+        )
+
+    monkeypatch.setattr("backtester.api.main.run_grid_search_from_request", fake_run_grid_search_from_request)
+
+    response = client.post(
+        "/api/grid-search",
+        json={
+            "ticker": "aapl",
+            "start_date": "2020-01-01",
+            "end_date": "2021-01-01",
+            "strategy": "momentum",
+            "parameter_grid": {"fast_window": [5], "slow_window": [20]},
+            "optimization_metric": "sharpe_ratio",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["config"]["ticker"] == "AAPL"
+
+
+def test_walk_forward_endpoint_uses_service_layer(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def fake_run_walk_forward_from_request(request):  # type: ignore[no-untyped-def]
+        return WalkForwardResponse(
+            config={"ticker": request.ticker},
+            strategy_id=request.strategy,
+            strategy_name="Momentum SMA Crossover",
+            optimization_metric=request.optimization_metric,
+            folds=[],
+            summary=WalkForwardSummary(
+                average_train_metric=None,
+                average_test_metric=None,
+                average_degradation=None,
+                number_of_folds=0,
+                parameter_stability=None,
+                warnings=[],
+            ),
+        )
+
+    monkeypatch.setattr("backtester.api.main.run_walk_forward_from_request", fake_run_walk_forward_from_request)
+
+    response = client.post(
+        "/api/walk-forward",
+        json={
+            "ticker": "aapl",
+            "start_date": "2020-01-01",
+            "end_date": "2021-01-01",
+            "strategy": "momentum",
+            "parameter_grid": {"fast_window": [5], "slow_window": [20]},
+            "optimization_metric": "sharpe_ratio",
+            "train_window_bars": 40,
+            "test_window_bars": 10,
+            "step_bars": 10,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["config"]["ticker"] == "AAPL"

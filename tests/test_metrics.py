@@ -10,12 +10,20 @@ from backtester.engine import BacktestConfig
 from backtester.engine.backtest import BacktestResult
 from backtester.metrics import (
     annualized_return,
+    best_worst_day,
+    conditional_value_at_risk,
+    drawdown_duration_days,
     generate_report,
     max_drawdown,
+    monthly_returns,
     profit_factor,
+    rolling_drawdown,
+    rolling_sharpe_ratio,
+    rolling_volatility,
     sharpe_ratio,
     sortino_ratio,
     total_return,
+    value_at_risk,
     win_rate,
 )
 from backtester.portfolio import Side, Trade
@@ -88,6 +96,35 @@ def test_max_drawdown_known_curve() -> None:
 
 def test_max_drawdown_empty_curve() -> None:
     assert max_drawdown(pd.Series(dtype="float64")) == 0.0
+
+
+def test_richer_risk_analytics_are_hand_checkable() -> None:
+    equity = pd.Series(
+        [100.0, 110.0, 99.0, 105.0, 95.0],
+        index=pd.date_range("2020-01-01", periods=5, name="date"),
+    )
+    returns = equity.pct_change().dropna()
+
+    assert best_worst_day(returns) == pytest.approx((0.1, -0.1))
+    assert drawdown_duration_days(equity) == 3
+    assert rolling_volatility(returns, window=2).iloc[-1] > 0
+    assert rolling_sharpe_ratio(returns, window=2).iloc[-1] != 0
+    assert rolling_drawdown(equity, window=5).iloc[-1] == pytest.approx((95.0 - 110.0) / 110.0)
+    assert value_at_risk(returns, confidence=0.75) == pytest.approx(returns.quantile(0.25))
+    assert conditional_value_at_risk(returns, confidence=0.75) <= value_at_risk(returns, confidence=0.75)
+
+
+def test_monthly_returns_table() -> None:
+    equity = pd.Series(
+        [100.0, 110.0, 121.0],
+        index=pd.to_datetime(["2020-01-31", "2020-02-28", "2020-03-31"]),
+    )
+
+    table = monthly_returns(equity)
+
+    assert list(table["year"]) == [2020, 2020]
+    assert list(table["month"]) == [2, 3]
+    assert list(table["return"]) == pytest.approx([0.1, 0.1])
 
 
 def test_win_rate() -> None:

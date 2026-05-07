@@ -11,6 +11,16 @@ from backtester.engine import PositionSizeMethod
 
 StrategyId = Literal["momentum", "mean_reversion"]
 ParameterType = Literal["integer", "number"]
+OptimizationMetric = Literal[
+    "total_return",
+    "annualized_return",
+    "sharpe_ratio",
+    "sortino_ratio",
+    "max_drawdown",
+    "information_ratio",
+    "profit_factor",
+    "win_rate",
+]
 
 
 class StrategyParameterSchema(BaseModel):
@@ -91,6 +101,80 @@ class BacktestRequest(BaseModel):
         return self
 
 
+class ResearchBaseRequest(BaseModel):
+    """Shared request fields for single-asset research workflows."""
+
+    ticker: str = Field(..., min_length=1)
+    start_date: str = Field(..., min_length=1)
+    end_date: str = Field(..., min_length=1)
+    strategy: StrategyId
+    initial_cash: float = Field(default=100_000.0, gt=0)
+    commission_rate: float = Field(default=0.001, ge=0)
+    slippage_bps: float = Field(default=5.0, ge=0)
+    position_size_method: PositionSizeMethod = PositionSizeMethod.FIXED_DOLLAR
+    position_size_value: float = Field(default=10_000.0, gt=0)
+    benchmark: bool = True
+    parameter_grid: dict[str, list[int | float]] = Field(default_factory=dict)
+    optimization_metric: OptimizationMetric = "sharpe_ratio"
+
+    @field_validator("ticker")
+    @classmethod
+    def normalize_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @model_validator(mode="after")
+    def validate_research_request(self) -> "ResearchBaseRequest":
+        if self.start_date >= self.end_date:
+            msg = "start_date must be before end_date."
+            raise ValueError(msg)
+        if not self.parameter_grid:
+            msg = "parameter_grid must include at least one parameter range."
+            raise ValueError(msg)
+
+        for name, values in self.parameter_grid.items():
+            if not values:
+                msg = f"parameter_grid.{name} must not be empty."
+                raise ValueError(msg)
+            for value in values:
+                numeric_value = float(value)
+                if numeric_value <= 0:
+                    msg = f"parameter_grid.{name} values must be positive."
+                    raise ValueError(msg)
+
+        expected = {"fast_window", "slow_window"} if self.strategy == "momentum" else {"window", "num_std"}
+        provided = set(self.parameter_grid)
+        unexpected = provided - expected
+        missing = expected - provided
+        if unexpected:
+            msg = f"Unsupported parameter(s) for {self.strategy}: {', '.join(sorted(unexpected))}."
+            raise ValueError(msg)
+        if missing:
+            msg = f"Missing parameter range(s) for {self.strategy}: {', '.join(sorted(missing))}."
+            raise ValueError(msg)
+        return self
+
+
+class GridSearchRequest(ResearchBaseRequest):
+    """Grid-search request submitted by the frontend."""
+
+    max_results: int = Field(default=25, ge=1, le=250)
+
+
+class WalkForwardRequest(ResearchBaseRequest):
+    """Walk-forward request submitted by the frontend."""
+
+    train_window_bars: int = Field(default=252, ge=20)
+    test_window_bars: int = Field(default=63, ge=5)
+    step_bars: int = Field(default=63, ge=1)
+
+    @model_validator(mode="after")
+    def validate_windows(self) -> "WalkForwardRequest":
+        if self.train_window_bars <= self.test_window_bars:
+            msg = "train_window_bars must be greater than test_window_bars."
+            raise ValueError(msg)
+        return self
+
+
 class BacktestSummary(BaseModel):
     """Summary values shown above the dashboard charts."""
 
@@ -116,6 +200,20 @@ class SeriesPoint(BaseModel):
 
     date: str
     value: float
+
+
+class RiskAnalytics(BaseModel):
+    """Additional risk analytics derived server-side from a backtest."""
+
+    best_day: float
+    worst_day: float
+    drawdown_duration_days: int
+    value_at_risk_95: float
+    conditional_value_at_risk_95: float
+    rolling_sharpe: list[SeriesPoint]
+    rolling_volatility: list[SeriesPoint]
+    rolling_drawdown: list[SeriesPoint]
+    monthly_returns: list[dict[str, int | float]]
 
 
 class PricePoint(BaseModel):
@@ -152,10 +250,106 @@ class BacktestResponse(BaseModel):
     summary: BacktestSummary
     series: BacktestSeries
     trades: list[TradeSchema]
+    risk: RiskAnalytics | None = None
+
+
+class GridSearchRow(BaseModel):
+    """One ranked grid-search row."""
+
+    rank: int | None
+    parameters: dict[str, int | float]
+    final_value: float | None
+    total_return: float | None
+    annualized_return: float | None
+    sharpe_ratio: float | None
+    sortino_ratio: float | None
+    max_drawdown: float | None
+    information_ratio: float | None = None
+    benchmark_total_return: float | None = None
+    excess_total_return: float | None = None
+    profit_factor: float | None
+    win_rate: float | None
+    total_trades: int
+    error: str | None = None
+
+
+class HeatmapPoint(BaseModel):
+    """Heatmap-ready metric value for two numeric parameter dimensions."""
+
+    x_param: str
+    y_param: str
+    x: int | float
+    y: int | float
+    value: float | None
+    parameters: dict[str, int | float]
+
+
+class RobustnessAnalysis(BaseModel):
+    """Deterministic research-aid warnings for grid-search results."""
+
+    robustness_score: float
+    warnings: list[str]
+    notes: list[str]
+    nearby_parameter_stability: float | None = None
+    trade_count_flags: list[str]
+    drawdown_flags: list[str]
+    overfit_risk_flags: list[str]
+
+
+class GridSearchResponse(BaseModel):
+    """Grid-search response consumed by Backtest Lab."""
+
+    config: dict[str, object]
+    strategy_id: StrategyId
+    strategy_name: str
+    optimization_metric: OptimizationMetric
+    total_combinations: int
+    results: list[GridSearchRow]
+    failed_combinations: list[GridSearchRow]
+    best_parameters: dict[str, int | float] | None
+    best_row: GridSearchRow | None
+    heatmap: list[HeatmapPoint]
+    analysis: RobustnessAnalysis
+
+
+class WalkForwardFold(BaseModel):
+    """One walk-forward train/test fold."""
+
+    fold: int
+    train_start: str
+    train_end: str
+    test_start: str
+    test_end: str
+    selected_parameters: dict[str, int | float]
+    train_metrics: GridSearchRow | None
+    test_metrics: GridSearchRow | None
+    degradation_ratio: float | None
+    warnings: list[str]
+
+
+class WalkForwardSummary(BaseModel):
+    """Aggregate walk-forward validation summary."""
+
+    average_train_metric: float | None
+    average_test_metric: float | None
+    average_degradation: float | None
+    number_of_folds: int
+    parameter_stability: float | None
+    warnings: list[str]
+
+
+class WalkForwardResponse(BaseModel):
+    """Walk-forward validation response consumed by Backtest Lab."""
+
+    config: dict[str, object]
+    strategy_id: StrategyId
+    strategy_name: str
+    optimization_metric: OptimizationMetric
+    folds: list[WalkForwardFold]
+    summary: WalkForwardSummary
 
 
 class ErrorResponse(BaseModel):
     """Readable API error response."""
 
     detail: str
-

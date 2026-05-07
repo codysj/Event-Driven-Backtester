@@ -1,4 +1,13 @@
-import type { BacktestRequest, BacktestResponse, HealthResponse, StrategyMetadata } from "./types";
+import type {
+  BacktestRequest,
+  BacktestResponse,
+  GridSearchRequest,
+  GridSearchResponse,
+  HealthResponse,
+  StrategyMetadata,
+  WalkForwardRequest,
+  WalkForwardResponse
+} from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -30,6 +39,20 @@ export async function fetchHealth(): Promise<HealthResponse> {
 
 export async function runBacktest(request: BacktestRequest): Promise<BacktestResponse> {
   return requestJson<BacktestResponse>("/api/backtest", {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
+}
+
+export async function runGridSearch(request: GridSearchRequest): Promise<GridSearchResponse> {
+  return requestJson<GridSearchResponse>("/api/grid-search", {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
+}
+
+export async function runWalkForward(request: WalkForwardRequest): Promise<WalkForwardResponse> {
+  return requestJson<WalkForwardResponse>("/api/walk-forward", {
     method: "POST",
     body: JSON.stringify(request)
   });
