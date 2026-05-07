@@ -31,6 +31,7 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 - Trade-level analytics.
 - Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
 - Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
+- Backend skeleton for a safe AI Strategy Builder that turns natural-language prompts into inert, validated strategy drafts using a deterministic fake provider.
 - Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
 - Matplotlib chart helpers.
 - CLI commands for single-asset backtests and grid searches.
@@ -43,6 +44,7 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 ```text
 Backtester/
 |-- backtester/
+|   |-- ai/
 |   |-- api/
 |   |-- data/
 |   |-- engine/
@@ -165,6 +167,10 @@ Endpoints:
   - Runs single-asset rolling train/test validation.
   - Request fields include base backtest config, strategy id, parameter grid, optimization metric, and train/test/step bars.
   - Response includes folds, selected train parameters, out-of-sample test metrics, degradation ratios, aggregate warnings, and parameter stability.
+- `POST /api/ai/strategy-draft`
+  - Converts a natural-language prompt into a structured strategy draft.
+  - Uses a deterministic fake provider for now; it does not call a real LLM.
+  - Returns inert JSON only. Drafts are inspectable and validated, but not compiled or executed yet.
 
 By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
 
@@ -302,6 +308,7 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 ## Known Limitations
 
 - Backtest Lab research workflows are still single-asset only.
+- AI Strategy Builder is backend skeleton only. It uses a fake deterministic provider, rejects unsupported/unsafe requests, never executes generated code, and does not yet compile drafts into backtest, grid-search, or walk-forward requests.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
 - Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
 - No authentication.

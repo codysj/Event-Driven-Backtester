@@ -14,6 +14,8 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 
 - `backtester/data/`
   - Fetches OHLCV data with yfinance, cleans it, validates schema, and caches Parquet files under `~/.backtester/cache/`.
+- `backtester/ai/`
+  - Defines the safe natural-language strategy draft contract, future prompt template, provider abstraction, deterministic fake provider, validation helpers, and placeholder compilers. Drafts are inert data and are not executed.
 - `backtester/strategy/`
   - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
@@ -54,6 +56,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - FastAPI `POST /api/backtest` wraps a single-asset backtest for Backtest Lab.
 - FastAPI `POST /api/grid-search` wraps single-asset parameter sweeps, heatmap data, and deterministic robustness analysis.
 - FastAPI `POST /api/walk-forward` wraps rolling train/test validation using grid-search-selected parameters per fold.
+- FastAPI `POST /api/ai/strategy-draft` wraps the AI Strategy Builder skeleton and returns validated structured drafts without calling a real LLM.
 - Frontend `frontend/lib/api.ts` isolates API calls from UI components.
 - Frontend `frontend/lib/validation.ts` performs inline form validation before POST requests.
 
@@ -87,6 +90,15 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
    - Price series
    - Executed trades
 9. Frontend renders KPI cards, Recharts equity/drawdown charts, result tabs, trades, metrics, and parameters.
+
+### Natural-Language Strategy Draft Flow
+
+1. A client submits a prompt to `POST /api/ai/strategy-draft`.
+2. The API calls the deterministic `FakeStrategyDraftProvider`.
+3. The provider returns a constrained `StrategyDraft` describing a single-run, grid-search, walk-forward, or unspecified target.
+4. `backtester/ai/validator.py` checks semantic safety: ticker readiness, ISO dates, date order, supported strategy kind, positive windows, momentum window ordering, mean-reversion bands, unsupported concepts, and raw-code fields.
+5. The API returns structured JSON containing the draft, status, warnings, unsupported items, and validation errors.
+6. The draft is not compiled or executed. Follow-up work will compile reviewed drafts into existing API request schemas.
 
 ### Browser Grid Search Flow
 
@@ -180,6 +192,16 @@ FastAPI app: `backtester/api/main.py`
     - `config`
     - `folds`
     - `summary`
+- `POST /api/ai/strategy-draft`
+  - Request schema:
+    - `prompt`
+    - optional `provider`, `model`, and `current_config` placeholders for future compatibility
+  - Response schema:
+    - `draft`
+    - `status`
+    - `warnings`
+    - `unsupported`
+    - `validation_errors`
 
 The API normalizes ticker case and validates strategy parameters with Pydantic.
 
@@ -214,6 +236,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - FastAPI serves the local API.
 - The Next.js frontend calls `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000`.
 - No database, auth provider, broker API, payment system, paid data feed, or live trading integration is present.
+- No real LLM provider is currently called. The AI Strategy Builder uses a deterministic fake provider and returns inert draft JSON only.
 
 ## Configuration And Environment
 
@@ -238,6 +261,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
+- AI strategy drafts are never executable code. Unsupported ideas such as broker execution, live trading, intraday minute bars, options flow, sentiment feeds, and multi-asset portfolios are surfaced as unsupported for the v1 builder.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

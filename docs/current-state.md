@@ -1,6 +1,6 @@
 # Current State
 
-Last documentation pass: 2026-05-06.
+Last documentation pass: 2026-05-07.
 
 ## Implemented Functionality
 
@@ -55,10 +55,18 @@ Last documentation pass: 2026-05-06.
 - FastAPI API:
   - `GET /health`
   - `GET /api/strategies`
+  - `POST /api/ai/strategy-draft`
   - `POST /api/backtest`
   - `POST /api/grid-search`
   - `POST /api/walk-forward`
   - Configurable CORS origins through `BACKTESTER_CORS_ORIGINS`
+- AI Strategy Builder backend foundation:
+  - `backtester/ai/` package with strict Pydantic draft schemas.
+  - Future-facing prompt template that requires structured JSON and forbids executable code.
+  - `LLMProvider` protocol and deterministic `FakeStrategyDraftProvider`.
+  - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
+  - Placeholder compilers for future conversion into existing API request objects.
+  - API endpoint returns draft status, warnings, unsupported items, and validation errors without calling a real LLM.
 - Backtest Lab frontend:
   - Next.js 15 App Router, TypeScript, Tailwind CSS, Recharts.
   - Full-screen dark finance dashboard shell.
@@ -82,6 +90,7 @@ Last documentation pass: 2026-05-06.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
+- AI Strategy Builder is backend-only and fake-provider-only. It does not call a real LLM, compile drafts into runs, execute generated code, or modify the frontend.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
@@ -112,6 +121,10 @@ Last documentation pass: 2026-05-06.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
 - Measure a pre-optimization baseline for `docs/benchmark_results.md`.
 - Keep the frontend dependency audit clean during future upgrades.
+- Compile reviewed AI drafts into existing backtest, grid-search, and walk-forward request schemas.
+- Add Backtest Lab UI for inspecting and editing AI strategy drafts after the backend compile contract exists.
+- Add a real provider behind the `LLMProvider` protocol with deterministic tests and no API keys committed.
+- Define a small rule DSL or typed strategy intent format before supporting strategies beyond momentum and mean reversion.
 
 ## Commands Verified During This Documentation Pass
 
@@ -125,7 +138,7 @@ cd frontend && npm run typecheck
 cd frontend && npm run build
 ```
 
-Results from this pass:
+Recent documented results:
 
 - `python -m pytest`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `python -m mypy backtester`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`

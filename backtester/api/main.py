@@ -7,6 +7,8 @@ import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from backtester.ai import draft_strategy_from_request
+from backtester.ai.schemas import StrategyDraftRequest, StrategyDraftResponse
 from backtester.api.schemas import (
     BacktestRequest,
     BacktestResponse,
@@ -59,6 +61,12 @@ def health() -> HealthResponse:
 def strategies() -> StrategiesResponse:
     """Return strategy metadata for the frontend form."""
     return StrategiesResponse(strategies=available_strategies())
+
+
+@app.post("/api/ai/strategy-draft", response_model=StrategyDraftResponse)
+def draft_ai_strategy(request: StrategyDraftRequest) -> StrategyDraftResponse:
+    """Create an inert strategy draft from a natural-language prompt."""
+    return draft_strategy_from_request(request)
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)
