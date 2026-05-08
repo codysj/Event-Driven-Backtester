@@ -1,9 +1,10 @@
-import { BarChart3, BookOpen, FlaskConical, Grid3X3, LineChart, ShieldCheck } from "lucide-react";
+import { BarChart3, BookOpen, Bot, FlaskConical, Grid3X3, LineChart, ShieldCheck } from "lucide-react";
 
 const navItems = [
   { label: "Overview", icon: BarChart3, href: "#overview", enabled: true },
   { label: "Backtest Lab", icon: FlaskConical, href: "#lab", enabled: true },
   { label: "Grid Search", icon: Grid3X3, href: "#grid-search", enabled: true },
+  { label: "Copilot", icon: Bot, href: "#research-copilot", enabled: true },
   { label: "Trades", icon: LineChart, href: "#trades", enabled: true },
   { label: "Docs", icon: BookOpen, href: "#docs", enabled: true }
 ];

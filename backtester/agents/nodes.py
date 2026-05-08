@@ -29,7 +29,10 @@ def draft_strategy(state: ResearchGraphState, provider: LLMProvider | None = Non
     if state.draft is not None:
         return state.add_event(ResearchStep.DRAFT_STRATEGY, "Reused existing inert strategy draft.")
 
-    response = draft_strategy_from_request(StrategyDraftRequest(prompt=state.user_goal), provider)
+    response = draft_strategy_from_request(
+        StrategyDraftRequest(prompt=state.user_goal, current_config=state.current_config),
+        provider,
+    )
     next_state = state.model_copy(
         update={
             "draft": response.draft,

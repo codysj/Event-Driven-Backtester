@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "../components/AppShell";
 import { BacktestForm } from "../components/BacktestForm";
 import { AiBuilderPanel } from "../components/ai-builder/AiBuilderPanel";
+import { ResearchCopilotPanel } from "../components/research-copilot/ResearchCopilotPanel";
 import { GridSearchForm, WalkForwardForm } from "../components/ResearchForms";
 import { GridSearchResults, WalkForwardResults } from "../components/ResearchResults";
 import { ResultsDashboard } from "../components/ResultsDashboard";
@@ -28,7 +29,7 @@ import {
 } from "../lib/validation";
 
 type ApiStatus = "checking" | "online" | "offline";
-type LabMode = "backtest" | "grid" | "walk" | "ai";
+type LabMode = "backtest" | "grid" | "walk" | "ai" | "copilot";
 
 function cloneDefaultRequest(): BacktestRequest {
   return {
@@ -98,7 +99,7 @@ export default function HomePage() {
   }
 
   function resetDefaults() {
-    if (mode === "ai") {
+    if (mode === "ai" || mode === "copilot") {
       setError(null);
       setGridError(null);
       setWalkError(null);
@@ -250,12 +251,16 @@ export default function HomePage() {
   }
 
   const configPanel =
-    mode === "ai" ? (
+    mode === "ai" || mode === "copilot" ? (
       <div className="space-y-5">
         <section className="rounded-xl border border-lab-border bg-lab-surface p-4">
-          <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-lab-secondary">Builder Scope</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-lab-secondary">
+            {mode === "copilot" ? "Copilot Scope" : "Builder Scope"}
+          </h3>
           <p className="mt-2 text-sm leading-6 text-lab-secondary">
-            Drafting and compilation call FastAPI AI endpoints. Loaded configs land in the existing workflow forms and wait for your review.
+            {mode === "copilot"
+              ? "Research Copilot plans through the backend graph, stops for approval, and can run one existing workflow after you approve it."
+              : "Drafting and compilation call FastAPI AI endpoints. Loaded configs land in the existing workflow forms and wait for your review."}
           </p>
         </section>
         <section className="rounded-xl border border-lab-border bg-lab-surface p-4">
@@ -263,8 +268,9 @@ export default function HomePage() {
           <ul className="mt-3 space-y-2 text-sm text-lab-secondary">
             <li>Momentum SMA crossover</li>
             <li>Mean reversion bands</li>
-            <li>Constrained rule-based single runs</li>
+            {mode === "ai" ? <li>Constrained rule-based single runs</li> : null}
             <li>Single Run, Grid Search, and Walk-Forward handoff</li>
+            {mode === "copilot" ? <li>Explicit approval before backend execution</li> : null}
           </ul>
         </section>
       </div>
@@ -313,7 +319,7 @@ export default function HomePage() {
       onRun={runActive}
       onReset={resetDefaults}
       actionLabel={actionLabel}
-      showRunAction={mode !== "ai"}
+      showRunAction={mode !== "ai" && mode !== "copilot"}
       configPanel={configPanel}
     >
       <div className="mb-5 flex flex-wrap gap-2 rounded-xl border border-lab-border bg-lab-surface p-2">
@@ -321,7 +327,8 @@ export default function HomePage() {
           { id: "backtest", label: "Single Run" },
           { id: "grid", label: "Grid Search" },
           { id: "walk", label: "Walk-Forward" },
-          { id: "ai", label: "AI Builder" }
+          { id: "ai", label: "AI Builder" },
+          { id: "copilot", label: "Research Copilot" }
         ].map((item) => (
           <button
             key={item.id}
@@ -352,6 +359,8 @@ export default function HomePage() {
 
       {mode === "ai" ? (
         <AiBuilderPanel onLoadCompiled={loadCompiledStrategy} />
+      ) : mode === "copilot" ? (
+        <ResearchCopilotPanel onLoadCompiled={loadCompiledStrategy} />
       ) : mode === "grid" ? (
         <GridSearchResults result={gridResult} isLoading={isLoading} error={gridError} onRunSelected={runSelectedConfig} />
       ) : mode === "walk" ? (

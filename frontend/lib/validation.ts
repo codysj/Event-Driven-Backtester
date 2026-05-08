@@ -88,6 +88,18 @@ export function validateWalkForwardRequest(request: WalkForwardRequest): FormErr
   return errors;
 }
 
+export function validateResearchGoal(goal: string): FormErrors {
+  const errors: FormErrors = {};
+  const normalized = goal.trim();
+  if (!normalized) {
+    errors.user_goal = "Research goal is required.";
+  }
+  if (normalized.length > 2000) {
+    errors.user_goal = "Research goal must be 2000 characters or fewer.";
+  }
+  return errors;
+}
+
 function validateResearchBase(request: GridSearchRequest | WalkForwardRequest): FormErrors {
   const errors: FormErrors = {};
   if (!request.ticker.trim()) {

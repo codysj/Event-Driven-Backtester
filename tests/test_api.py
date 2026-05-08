@@ -11,6 +11,8 @@ from backtester.api.schemas import (
     BacktestSeries,
     BacktestSummary,
     GridSearchResponse,
+    GridSearchRow,
+    HeatmapPoint,
     RobustnessAnalysis,
     SeriesPoint,
     WalkForwardResponse,
@@ -212,3 +214,165 @@ def test_walk_forward_endpoint_uses_service_layer(monkeypatch) -> None:  # type:
 
     assert response.status_code == 200
     assert response.json()["config"]["ticker"] == "AAPL"
+
+
+def test_research_plan_requires_approval_and_does_not_execute(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def fail_grid_search(request):  # type: ignore[no-untyped-def]
+        del request
+        raise AssertionError("research-plan must not execute workflows")
+
+    monkeypatch.setattr("backtester.agents.tools.run_grid_search_from_request", fail_grid_search)
+
+    response = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Optimize AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "awaiting_approval"
+    assert payload["approval_required"] is True
+    assert payload["target_mode"] == "grid_search"
+    assert payload["workflow_result"] is None
+    assert "run_workflow" not in payload["steps"]
+
+
+def test_research_approval_executes_one_mocked_workflow(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+
+    def fake_grid_search(request):  # type: ignore[no-untyped-def]
+        calls.append("grid")
+        return GridSearchResponse(
+            config={"ticker": request.ticker},
+            strategy_id=request.strategy,
+            strategy_name="Momentum SMA Crossover",
+            optimization_metric=request.optimization_metric,
+            total_combinations=1,
+            results=[
+                GridSearchRow(
+                    rank=1,
+                    parameters={"fast_window": 20, "slow_window": 100},
+                    final_value=101000.0,
+                    total_return=0.01,
+                    annualized_return=0.02,
+                    sharpe_ratio=0.8,
+                    sortino_ratio=0.9,
+                    max_drawdown=-0.05,
+                    information_ratio=None,
+                    benchmark_total_return=None,
+                    excess_total_return=None,
+                    profit_factor=1.2,
+                    win_rate=0.5,
+                    total_trades=4,
+                )
+            ],
+            failed_combinations=[],
+            best_parameters={"fast_window": 20, "slow_window": 100},
+            best_row=None,
+            heatmap=[
+                HeatmapPoint(
+                    x_param="fast_window",
+                    y_param="slow_window",
+                    x=20,
+                    y=100,
+                    value=0.8,
+                    parameters={"fast_window": 20, "slow_window": 100},
+                )
+            ],
+            analysis=RobustnessAnalysis(
+                robustness_score=90,
+                warnings=[],
+                notes=["Heuristics are a research aid, not a guarantee of future performance."],
+                nearby_parameter_stability=None,
+                trade_count_flags=[],
+                drawdown_flags=[],
+                overfit_risk_flags=[],
+            ),
+        )
+
+    monkeypatch.setattr("backtester.agents.tools.run_grid_search_from_request", fake_grid_search)
+    plan = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Optimize AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    ).json()
+
+    response = client.post(
+        "/api/ai/research-approve",
+        json={"state": plan, "approved_action": "run_grid_search"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert calls == ["grid"]
+    assert payload["status"] == "completed"
+    assert payload["approval_required"] is False
+    assert payload["workflow_result"]["summary"]["total_combinations"] == 1
+
+
+def test_research_approval_refuses_mismatched_action(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+
+    def fake_backtest(request):  # type: ignore[no-untyped-def]
+        del request
+        calls.append("backtest")
+        raise AssertionError("mismatched approval must not execute")
+
+    monkeypatch.setattr("backtester.agents.tools.run_backtest_from_request", fake_backtest)
+    plan = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Optimize AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    ).json()
+
+    response = client.post(
+        "/api/ai/research-approve",
+        json={"state": plan, "approved_action": "run_backtest"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert calls == []
+    assert payload["status"] == "blocked"
+    assert payload["approval_required"] is True
+    assert any("approved_action must be run_grid_search" in error for error in payload["validation_errors"])
+
+
+def test_research_plan_sanitizes_validation_errors(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    secret = "sk-secret-should-not-leak"
+
+    class MalformedProvider:
+        def draft_strategy(self, request):  # type: ignore[no-untyped-def]
+            del request
+            return {
+                "status": "ready",
+                "strategy_kind": "momentum",
+                "parameters": {"fast_window": "bad"},
+                "secret_payload": secret,
+            }
+
+    monkeypatch.setattr("backtester.ai.providers.get_strategy_draft_provider", lambda: MalformedProvider())
+
+    response = client.post(
+        "/api/ai/research-plan",
+        json={
+            "user_goal": "Run AAPL with momentum",
+            "context": {"api_key": secret},
+        },
+    )
+
+    assert response.status_code == 200
+    serialized = response.text
+    assert secret not in serialized
+    assert response.json()["status"] == "blocked"
+    assert response.json()["validation_errors"]
+
+
+def test_research_plan_uses_fake_provider_without_network() -> None:
+    response = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Run AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["draft"]["strategy_kind"] == "momentum"
+    assert payload["compile_payload"]["ticker"] == "AAPL"

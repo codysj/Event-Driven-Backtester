@@ -158,6 +158,67 @@ export type StrategyCompileResponse = {
   validation_errors: string[];
 };
 
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+
+export type ResearchStatus = "awaiting_approval" | "completed" | "blocked" | "drafted";
+
+export type ResearchStep =
+  | "interpret_research_goal"
+  | "draft_strategy"
+  | "validate_draft"
+  | "compile_request"
+  | "await_user_approval"
+  | "run_workflow"
+  | "analyze_results"
+  | "recommend_next_step";
+
+export type ApprovedAction = "run_backtest" | "run_grid_search" | "run_walk_forward";
+
+export type AuditEvent = {
+  step: ResearchStep;
+  message: string;
+};
+
+export type WorkflowResultSummary = {
+  target_mode: AiTargetMode;
+  status: string;
+  summary: Record<string, JsonValue>;
+  warnings: string[];
+};
+
+export type ResearchPlanRequest = {
+  user_goal: string;
+  current_config?: Record<string, JsonValue> | null;
+  context?: Record<string, JsonValue> | null;
+};
+
+export type ResearchGraphResponse = {
+  session_id: string;
+  user_goal: string;
+  status: ResearchStatus;
+  current_step: ResearchStep;
+  target_mode: AiTargetMode | null;
+  steps: ResearchStep[];
+  draft: StrategyDraft | null;
+  compile_response: StrategyCompileResponse | null;
+  compile_payload: StrategyCompilePayload | null;
+  approval_required: boolean;
+  approved_action: ApprovedAction | null;
+  workflow_result: WorkflowResultSummary | null;
+  analysis: string[];
+  recommendation: string | null;
+  warnings: string[];
+  unsupported: string[];
+  validation_errors: string[];
+  audit_log: AuditEvent[];
+};
+
+export type ResearchApprovalRequest = {
+  state: ResearchGraphResponse;
+  approved_action: ApprovedAction;
+};
+
 export type HealthResponse = {
   status: string;
 };

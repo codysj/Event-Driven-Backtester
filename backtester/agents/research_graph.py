@@ -18,6 +18,8 @@ class ResearchGraphDependencyError(RuntimeError):
 class _GraphState(TypedDict, total=False):
     session_id: str
     user_goal: str
+    current_config: NotRequired[dict[str, Any] | None]
+    context: NotRequired[dict[str, Any] | None]
     current_step: str
     target_mode: NotRequired[str | None]
     draft: NotRequired[dict[str, Any] | None]

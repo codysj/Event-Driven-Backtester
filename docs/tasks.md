@@ -2,11 +2,24 @@
 
 ## Now
 
+- Backtest Lab Research Copilot UI added:
+  - New Research Copilot mode calls `POST /api/ai/research-plan` and displays graph steps, status, target mode, draft details, compiled payload JSON, warnings, unsupported items, and validation errors.
+  - Approval remains explicit through a button that sends the prior state plus matching `approved_action` to `POST /api/ai/research-approve`.
+  - Approved results display workflow summary, deterministic backend analysis, and recommended next step.
+  - Compiled payloads can be loaded into existing Single Run, Grid Search, or Walk-Forward forms for review without auto-running.
+  - No frontend API-key handling, generated Python execution, auth, database persistence, server-side sessions, broker integration, live trading, or TypeScript reimplementation of backtesting/research metrics was added.
+
+- Research Copilot FastAPI endpoints added:
+  - `POST /api/ai/research-plan` drafts and compiles through the existing graph, returns sanitized request/response state, and stops before any workflow execution.
+  - `POST /api/ai/research-approve` resumes prior response state and runs at most one existing workflow only when `approved_action` matches the compiled target mode.
+  - Mismatched approval, unsupported targets, missing payloads, validation errors, and already-executed states do not run workflows.
+  - No frontend UI, auth, database persistence, server-side sessions, generated Python execution, broker integration, or live trading was added.
+
 - Backend-only LangGraph Research Copilot skeleton added:
   - `backtester/agents/` typed state, graph nodes, LangGraph wiring, safe workflow wrappers, and deterministic result analysis.
   - Graph flow drafts and compiles through existing AI Builder services, records warnings/errors/audit steps, and stops at an approval gate by default.
   - Resumed states can run exactly one existing workflow only when `approved_action` matches the compiled target mode.
-  - No frontend UI, public API endpoint, generated strategy execution, shell/filesystem tool, database persistence, broker integration, or live trading was added.
+  - Initially added without frontend UI, generated strategy execution, shell/filesystem tool, database persistence, broker integration, or live trading.
 
 - AI Strategy Builder backend skeleton added:
   - `backtester/ai/` schemas, prompt template, provider abstraction/factory, deterministic fake provider, optional OpenAI-compatible provider, validator, and compilers.
@@ -26,8 +39,8 @@ The latest research-workstation batch added:
 
 ## Next
 
-- Design the Research Copilot API contract and approval UX before exposing it to Backtest Lab.
-- Decide whether Research Copilot sessions need persistence, and if so design it separately from this skeleton.
+- Manually test Research Copilot with the API and frontend running together, then capture updated portfolio screenshots if desired.
+- Decide whether Research Copilot sessions need persistence after the request/response UI has been exercised.
 - Expose multi-asset backtesting through FastAPI if the dashboard roadmap needs it.
 - Expand the rule DSL only when there is a tested strategy intent contract for more indicators, OR composition, and research optimization.
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.

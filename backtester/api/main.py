@@ -28,6 +28,13 @@ from backtester.api.schemas import (
     WalkForwardRequest,
     WalkForwardResponse,
 )
+from backtester.api.research_schemas import (
+    ResearchApprovalRequest,
+    ResearchApprovalResponse,
+    ResearchPlanRequest,
+    ResearchPlanResponse,
+)
+from backtester.api.research_services import approve_research_from_request, plan_research_from_request
 from backtester.api.services import (
     available_strategies,
     run_backtest_from_request,
@@ -101,6 +108,18 @@ def draft_ai_strategy(request: StrategyDraftRequest) -> StrategyDraftResponse:
 def compile_ai_strategy(request: StrategyCompileRequest) -> StrategyCompileResponse:
     """Compile an inert strategy draft into an existing API request payload."""
     return compile_strategy_draft(request.draft)
+
+
+@app.post("/api/ai/research-plan", response_model=ResearchPlanResponse)
+def plan_ai_research(request: ResearchPlanRequest) -> ResearchPlanResponse:
+    """Create a Research Copilot plan and stop before execution."""
+    return plan_research_from_request(request)
+
+
+@app.post("/api/ai/research-approve", response_model=ResearchApprovalResponse)
+def approve_ai_research(request: ResearchApprovalRequest) -> ResearchApprovalResponse:
+    """Resume a Research Copilot plan after one explicit workflow approval."""
+    return approve_research_from_request(request)
 
 
 @app.post("/api/backtest", response_model=BacktestResponse)

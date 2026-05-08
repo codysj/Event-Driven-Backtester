@@ -59,6 +59,8 @@ class ResearchGraphState(BaseModel):
 
     session_id: str = Field(default_factory=lambda: str(uuid4()))
     user_goal: str
+    current_config: dict[str, Any] | None = None
+    context: dict[str, Any] | None = None
     current_step: ResearchStep = ResearchStep.INTERPRET_RESEARCH_GOAL
     target_mode: TargetMode | None = None
     draft: StrategyDraft | None = None

@@ -4,6 +4,9 @@ import type {
   GridSearchRequest,
   GridSearchResponse,
   HealthResponse,
+  ResearchApprovalRequest,
+  ResearchGraphResponse,
+  ResearchPlanRequest,
   StrategyCompileRequest,
   StrategyCompileResponse,
   StrategyDraftRequest,
@@ -91,6 +94,20 @@ export async function draftStrategyFromPrompt(request: StrategyDraftRequest): Pr
 
 export async function compileStrategyDraft(request: StrategyCompileRequest): Promise<StrategyCompileResponse> {
   return requestJson<StrategyCompileResponse>("/api/ai/compile", {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
+}
+
+export async function planResearch(request: ResearchPlanRequest): Promise<ResearchGraphResponse> {
+  return requestJson<ResearchGraphResponse>("/api/ai/research-plan", {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
+}
+
+export async function approveResearch(request: ResearchApprovalRequest): Promise<ResearchGraphResponse> {
+  return requestJson<ResearchGraphResponse>("/api/ai/research-approve", {
     method: "POST",
     body: JSON.stringify(request)
   });
