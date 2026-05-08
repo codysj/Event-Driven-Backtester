@@ -1,84 +1,232 @@
-# Backtester
+# Backtest Lab AI
 
-Backtester is an event-driven Python backtesting engine for researching trading strategies over historical OHLCV data. It includes a FastAPI wrapper and a polished Next.js dashboard called **Backtest Lab** for running single-asset simulations, grid searches, and walk-forward validation from the browser.
+AI-assisted strategy research platform for designing, testing, and analyzing trading strategies over historical market data.
 
-The project is built as a portfolio-quality demonstration of backtesting architecture, API integration, and financial dashboard UX. It is a research tool only, not a brokerage app or investment advisor.
+Backtest Lab AI combines a from-scratch event-driven Python backtesting engine, a FastAPI research API, a Next.js dashboard, a natural-language strategy builder, and a LangGraph-powered Research Copilot. The repository is still named `backtester` internally; the broader product surface is branded as Backtest Lab AI.
+
+> Research tool only. Not investment advice. No brokerage integration, live trading, or order placement.
+
+## Why This Project Exists
+
+Many beginner backtesting projects stop at a script that runs a moving-average strategy and prints a Sharpe ratio. This project is built as a more complete local research environment:
+
+- A reusable event-driven backtesting engine.
+- Portfolio accounting with cash, positions, commissions, slippage, trades, and equity curves.
+- Performance and risk analytics implemented from first principles.
+- Grid search and walk-forward validation for strategy research.
+- A browser-based research workstation backed by FastAPI.
+- Natural-language strategy drafting through a constrained AI validation and compile pipeline.
+- Agentic research planning with explicit approval gates before execution.
+
+The goal is not to build a trading product. The goal is to demonstrate the architecture behind one.
+
+## Core Capabilities
+
+### AI-Assisted Research
+
+- Natural-language strategy builder that turns prompts into structured, validated strategy drafts.
+- Compile-only handoff into existing backtest, grid-search, or walk-forward API request schemas.
+- Backend-only provider configuration with deterministic fake, OpenRouter, OpenAI-compatible, DeepSeek, and optional LangChain OpenAI-compatible providers.
+- Strict Pydantic validation, semantic checks, sanitized errors, and extra-field rejection before workflow handoff.
+- Constrained rule-based strategy DSL instead of generated executable code.
+- Research Copilot workflow powered by backend graph state transitions.
+- Explicit approval gate before a Copilot-generated workflow can run.
+- Deterministic post-run analysis and next-step recommendations.
+
+### Backtesting Engine
+
+- Event-driven bar-by-bar simulation.
+- Pluggable strategy interfaces for single-asset and Python-side multi-asset workflows.
+- Built-in momentum SMA crossover and mean-reversion strategies.
+- Rule-based strategy execution from a validated, non-executable DSL.
+- Portfolio simulation with cash, positions, orders, trades, commissions, slippage, and equity curves.
+- Position sizing modes: fixed quantity, fixed dollar, all-in, percent equity, and simplified volatility targeting.
+- Buy-and-hold benchmark comparison and trade-level analytics.
+
+### Research Workflows
+
+- Single-run backtests.
+- Parameter grid search with failed-combination capture.
+- Heatmap-ready grid-search response data.
+- Deterministic robustness warnings.
+- Walk-forward validation with train/test folds.
+- Parameter stability and degradation summaries.
+
+### Analytics
+
+Metrics are implemented directly rather than delegated to financial analytics libraries:
+
+- Total and annualized return.
+- Sharpe and Sortino ratios.
+- Max drawdown.
+- Win rate and profit factor.
+- Alpha, beta, excess return, and information ratio.
+- Rolling Sharpe, rolling volatility, and rolling drawdown.
+- Drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
+
+### Full-Stack Dashboard
+
+Backtest Lab is a local browser-based research workstation built with Next.js, TypeScript, Tailwind CSS, Recharts, and lucide-react.
+
+- Full-screen dark-mode dashboard with sidebar workflow navigation.
+- API health indicator and strategy metadata loading from FastAPI.
+- Single Run, Grid Search, Walk-Forward, AI Builder, and Research Copilot modes.
+- KPI cards, equity and drawdown charts, result tabs, trades table, risk analytics, and export tools.
+- Natural-language AI Builder UI with auditable draft previews and compile-to-form handoff.
+- Research Copilot timeline, compiled-payload preview, approval workflow, and server-generated analysis.
+
+The frontend is intentionally an API client. It renders forms, charts, validation states, and workflow results, but it does not reimplement portfolio accounting, metric calculations, grid search, walk-forward logic, or backtesting behavior in TypeScript.
+
+## System Architecture
+
+```mermaid
+flowchart LR
+    User[User] --> UI[Backtest Lab<br/>Next.js Dashboard]
+    UI --> API[FastAPI Research API]
+    API --> Engine[Event-Driven<br/>Backtesting Engine]
+    API --> AI[AI Strategy Builder]
+    API --> Copilot[Research Copilot<br/>LangGraph State Machine]
+    AI --> Validator[Strict Validation<br/>Pydantic + Semantic Checks]
+    Validator --> Compiler[Compile to Existing<br/>Request Schemas]
+    Copilot --> Draft[Draft Strategy]
+    Draft --> Compiler
+    Compiler --> Approval[Explicit Approval Gate]
+    Approval --> Engine
+    Engine --> Portfolio[Portfolio Simulation]
+    Engine --> Metrics[Performance + Risk Metrics]
+    Engine --> Results[Research Results]
+    Results --> API
+    API --> UI
+```
+
+For deeper implementation notes, see [docs/architecture.md](docs/architecture.md) and [docs/current-state.md](docs/current-state.md).
+
+## AI Safety Design
+
+The AI layer treats model output as useful but untrusted. It does not execute generated Python or arbitrary tool calls.
+
+Instead, the system uses:
+
+- JSON-only provider outputs.
+- Strict Pydantic schemas with extra fields rejected.
+- Semantic validation for supported tickers, dates, parameters, strategy kinds, and unsupported concepts.
+- A constrained rule-based strategy DSL.
+- Compile-only handoff into existing API request schemas.
+- Backend-only API keys.
+- Explicit user approval before Research Copilot can run a workflow.
+- Revalidation of browser-returned approval payloads before execution.
+- Sanitized validation errors that avoid leaking secrets or raw malformed payloads.
+
+## Example Research Flow
+
+A user enters:
+
+```text
+Find a robust AAPL momentum strategy from 2018 to 2023 and compare against buy-and-hold.
+```
+
+Research Copilot then:
+
+1. Interprets the research goal.
+2. Drafts a structured strategy request.
+3. Validates the draft.
+4. Compiles it into an existing backtest, grid-search, or walk-forward payload.
+5. Stops before execution.
+6. Shows warnings, assumptions, unsupported items, and the compiled request.
+7. Requires explicit approval.
+8. Runs exactly one approved workflow.
+9. Returns deterministic analysis and a recommended next step.
+
+The AI layer does not bypass the engine, invent execution logic, generate executable strategy code, or place trades.
 
 ## Built From Scratch
 
-Backtester intentionally avoids backtesting-specific libraries such as backtrader, zipline, quantstats, and empyrical. Data loading, strategy interfaces, portfolio simulation, performance metrics, benchmark comparison, visualization, and engine loops are implemented from first principles with general-purpose Python tools.
+The core engine intentionally avoids domain-specific backtesting and financial metrics libraries.
 
-## Current Features
+Not used:
 
-- Event-driven bar-by-bar simulation.
-- Pluggable strategy interfaces for single-asset and multi-asset workflows.
-- Built-in Momentum SMA Crossover and Mean Reversion strategies.
-- Historical OHLCV loading with yfinance and Parquet caching.
-- Portfolio simulation with cash, positions, trades, commissions, slippage, and equity curves.
-- Position sizing methods:
-  - Fixed quantity
-  - Fixed dollar
-  - All-in
-  - Percent equity
-  - Simplified volatility targeting
-- Performance metrics from scratch:
-  - Total and annualized return
-  - Sharpe and Sortino ratios
-  - Max drawdown
-  - Win rate and profit factor
-  - Alpha, beta, excess return, and information ratio when a benchmark is supplied
-- Buy-and-hold benchmark equity generation.
-- Trade-level analytics.
-- Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
-- Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
-- Safe AI Strategy Builder foundation that turns natural-language prompts into inert, validated strategy drafts and compiles them into existing API-compatible request payloads using a deterministic fake provider by default, with optional server-side OpenAI-compatible, OpenRouter, and LangChain structured-output provider support plus a constrained rule-based strategy DSL.
-- Backend/API Research Copilot that orchestrates the existing safe draft, validation, compile, approval, optional single workflow run, and deterministic analysis steps through typed request/response state, with a Backtest Lab approval workflow.
-- Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
-- Matplotlib chart helpers.
-- CLI commands for single-asset backtests and grid searches.
-- FastAPI API for local app integration.
-- Backtest Lab dashboard built with Next.js, TypeScript, Tailwind CSS, and Recharts, including a natural-language AI Builder UI and Research Copilot mode that call FastAPI.
-- Backend Research Copilot graph package exposed through safe FastAPI endpoints with explicit approval gates and frontend state passing.
-- pytest and mypy validation through Python CI.
+- backtrader
+- zipline
+- quantstats
+- empyrical
 
-## Project Layout
+Implemented directly:
+
+- Data loading and schema validation.
+- Strategy interfaces and event-driven simulation loops.
+- Portfolio accounting, commission, and slippage modeling.
+- Equity curve generation and benchmark comparison.
+- Performance and risk metrics.
+- Grid search and walk-forward validation.
+- Visualization helpers.
+
+General-purpose tools such as Pandas, NumPy, FastAPI, Pydantic, Matplotlib, Recharts, and Next.js are used where appropriate.
+
+## Repository Structure
 
 ```text
 Backtester/
 |-- backtester/
-|   |-- ai/
-|   |-- agents/
-|   |-- api/
-|   |-- data/
-|   |-- engine/
-|   |-- metrics/
-|   |-- portfolio/
-|   |-- research/
-|   |-- strategy/
-|   `-- viz/
-|-- benchmarks/
+|   |-- ai/              # AI draft schemas, providers, validation, compiler
+|   |-- agents/          # Research Copilot graph state, nodes, tools
+|   |-- api/             # FastAPI routes, schemas, services
+|   |-- data/            # yfinance loading, cleanup, Parquet cache
+|   |-- engine/          # Single-asset and multi-asset engines
+|   |-- metrics/         # Performance and risk metrics
+|   |-- portfolio/       # Orders, trades, positions, portfolio accounting
+|   |-- research/        # Grid search and walk-forward validation
+|   |-- strategy/        # Strategy interfaces, built-ins, rule DSL
+|   `-- viz/             # Matplotlib chart helpers
+|-- frontend/
+|   |-- app/             # Next.js App Router entrypoint
+|   |-- components/      # Dashboard, charts, forms, AI and Copilot UI
+|   `-- lib/             # API client, types, defaults, validation
 |-- docs/
 |-- examples/
-|-- frontend/
-|   |-- app/
-|   |-- components/
-|   `-- lib/
+|-- benchmarks/
 |-- tests/
 |-- pyproject.toml
 `-- requirements.txt
 ```
 
+## Tech Stack
+
+Backend:
+
+- Python 3.11+
+- Pandas, NumPy, yfinance, pyarrow
+- FastAPI, Pydantic, Uvicorn
+- httpx, python-dotenv
+- LangGraph
+- Optional LangChain OpenAI-compatible provider integration
+- pytest, pytest-cov, mypy
+
+Frontend:
+
+- Next.js 15 App Router
+- React 18
+- TypeScript
+- Tailwind CSS
+- Recharts
+- lucide-react
+
+Quality and tooling:
+
+- GitHub Actions CI.
+- Python tests and strict mypy configuration.
+- Frontend lint, typecheck, audit, and production build checks.
+- Backend-only AI secrets loaded from a private `.env`.
+- Parquet cache for historical OHLCV data.
+
 ## Quick Start
 
-### Python Setup
-
-Use a repo-root virtual environment for local development. The `.venv/` directory is ignored by Git and should never be committed.
+### 1. Create a Python Environment
 
 Windows PowerShell:
 
 ```powershell
 py -m venv .venv
-.venv\Scripts\Activate
+.\.venv\Scripts\Activate
 python -m pip install -r requirements.txt
 ```
 
@@ -90,15 +238,7 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-When you are done, leave the environment with:
-
-```bash
-deactivate
-```
-
-The `.venv/` directory is gitignored and should stay local. Backend `.env` files are also gitignored; never commit `.env` or put backend AI keys in frontend env files.
-
-Run Python validation:
+### 2. Run Backend Validation
 
 ```bash
 python -m pytest
@@ -106,13 +246,17 @@ python -m mypy backtester
 python -m pytest --cov=backtester
 ```
 
-Start the FastAPI backend:
+### 3. Start the FastAPI Backend
 
 ```bash
 python -m uvicorn backtester.api.main:app --reload
 ```
 
-Start the frontend:
+The API runs at `http://localhost:8000` by default.
+
+### 4. Start the Frontend
+
+In a second terminal:
 
 ```bash
 cd frontend
@@ -120,128 +264,105 @@ npm install
 npm run dev
 ```
 
-The frontend uses Next.js 15 and requires a compatible Node.js runtime (`^18.18.0`, `^19.8.0`, or `>=20.0.0`). The current local validation was run with Node 24.14.0 and npm 11.9.0.
+Open `http://localhost:3000`.
 
-Build the frontend:
+Backtest Lab uses Next.js 15 and requires a compatible Node.js runtime: `^18.18.0`, `^19.8.0`, or `>=20.0.0`.
+
+## Validation Commands
+
+Python:
+
+```bash
+python -m pytest
+python -m mypy backtester
+python -m pytest --cov=backtester
+```
+
+Frontend:
 
 ```bash
 cd frontend
 npm run lint
 npm run typecheck
 npm run build
+npm audit
 ```
 
-`npm run lint` uses ESLint with the Next.js core web vitals and TypeScript rules. `npm run typecheck` runs `next typegen && tsc --noEmit`.
-
-## Backtest Lab Dashboard
-
-**Backtest Lab** is the local browser interface for single-asset research. It is designed as a compact dark-mode financial research workstation rather than a toy demo.
-
-Current dashboard capabilities:
-
-- Full-screen app shell with sidebar navigation, compact run context header, and sticky configuration panel.
-- API health indicator based on `GET /health`.
-- Strategy metadata loaded from `GET /api/strategies`, with local fallbacks for offline form rendering.
-- Mode switcher for Single Run, Grid Search, Walk-Forward, AI Builder, and Research Copilot workflows.
-- Single-asset backtest form for:
-  - Ticker
-  - Start and end dates
-  - Strategy selection
-  - Momentum and mean-reversion parameters
-  - Initial cash
-  - Position sizing method and value
-  - Commission
-  - Slippage in basis points
-  - Buy-and-hold benchmark toggle
-- Inline validation for ticker, date range, cash, costs, sizing, and strategy parameters.
-- Run status, loading skeletons, empty state, and actionable API/error state.
-- KPI cards for total return, annualized return, Sharpe, Sortino, max drawdown, final value, total trades, and win rate.
-- Equity chart with optional benchmark line.
-- Drawdown chart with percent axis and negative drawdown display.
-- Tabs for Summary, Trades, Metrics, and Parameters.
-- Reproducibility view showing the submitted config and strategy parameters.
-- Risk tab with richer server-computed analytics and monthly returns.
-- Frontend exports for trades CSV, metrics JSON, reproducibility config JSON, and grid-search CSV.
-- Grid-search form for ticker/date range, strategy parameter ranges, costs/sizing, benchmark toggle, optimization metric, and top-N results.
-- Grid-search results with leaderboard, best row, robustness warnings, failed combinations, two-parameter heatmap, exports, and a "Run selected config" action that promotes a row into the single-run workflow.
-- Walk-forward form for train/test/step windows and strategy parameter grids.
-- Walk-forward results with fold table, selected parameters per fold, train/test metric comparison, degradation ratio, aggregate warnings, and parameter stability.
-- AI Builder prompt panel for natural-language strategy drafts, prompt templates, auditable generated-strategy preview, compile-and-load handoff into existing workflow forms, and reproducibility JSON.
-- Research Copilot panel for natural-language research goals, graph step timeline, current status, inferred target mode, draft and compiled payload preview, warning/unsupported/error display, explicit approval button, deterministic backend analysis, workflow result summary, recommendation, and safe load-into-form handoff.
-- Research disclaimer: not investment advice.
-
-The frontend does not implement backtesting, grid search, walk-forward optimization, portfolio accounting, benchmark math, or performance metrics in TypeScript. It submits requests to FastAPI and renders the returned metrics, series, trades, research rows, warnings, and config.
-
-## API
+## API Overview
 
 FastAPI app: `backtester/api/main.py`
 
-Endpoints:
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/health` | API health check |
+| GET | `/api/strategies` | Strategy metadata for frontend forms |
+| POST | `/api/backtest` | Run a single-asset backtest |
+| POST | `/api/grid-search` | Run a parameter sweep |
+| POST | `/api/walk-forward` | Run rolling train/test validation |
+| POST | `/api/ai/strategy-draft` | Convert natural language into a validated strategy draft |
+| POST | `/api/ai/compile` | Compile a draft into an existing workflow request |
+| POST | `/api/ai/research-plan` | Run Research Copilot through planning and compile steps |
+| POST | `/api/ai/research-approve` | Approve and run one compiled workflow |
 
-- `GET /health`
-  - Returns API status.
-- `GET /api/strategies`
-  - Returns strategy ids, labels, descriptions, and parameter metadata for the frontend form.
-- `POST /api/backtest`
-  - Runs a single-asset backtest through the Python engine.
-  - Request fields include ticker, date range, strategy, initial cash, commission, slippage, sizing method/value, benchmark toggle, and strategy parameters.
-  - Response includes config, summary metrics, equity/benchmark/drawdown/price series, executed trades, and richer risk analytics.
-- `POST /api/grid-search`
-  - Runs single-asset parameter sweeps through the Python research layer.
-  - Request fields include base backtest config, strategy id, parameter grid, optimization metric, benchmark toggle, and max results.
-  - Response includes ranked rows, failed combinations, best parameters, heatmap-ready points for two varied numeric parameters, and deterministic robustness analysis.
-- `POST /api/walk-forward`
-  - Runs single-asset rolling train/test validation.
-  - Request fields include base backtest config, strategy id, parameter grid, optimization metric, and train/test/step bars.
-  - Response includes folds, selected train parameters, out-of-sample test metrics, degradation ratios, aggregate warnings, and parameter stability.
-- `POST /api/ai/strategy-draft`
-  - Converts a natural-language prompt into a structured strategy draft.
-  - Uses the server-side provider factory. By default this is the deterministic fake provider; real OpenAI-compatible providers are opt-in through backend environment variables.
-- `POST /api/ai/compile`
-  - Compiles a validated strategy draft into an existing single-run, grid-search, or walk-forward request payload.
-  - Returns inert JSON only. It does not execute the compiled request, run a backtest, or generate strategy code.
-- `POST /api/ai/research-plan`
-  - Runs the Research Copilot through draft and compile, then stops before execution.
-  - Request fields include `user_goal` plus optional `current_config` and `context`.
-  - Response includes sanitized graph state, steps, draft, compiled payload when available, warnings, unsupported items, validation errors, and `approval_required=true` when one existing workflow can be approved.
-- `POST /api/ai/research-approve`
-  - Resumes a prior response state and runs exactly one approved existing workflow when `approved_action` matches the compiled target.
-  - Supported actions are `run_backtest`, `run_grid_search`, and `run_walk_forward`.
-  - Mismatched approval, missing or malformed compiled payloads, prior executed states, unsupported targets, and already-blocked states return sanitized validation errors without running a workflow. Malformed approval payloads are not echoed back to the browser.
-
-By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
+By default, the frontend calls `http://localhost:8000`. Override with `frontend/.env.local`:
 
 ```bash
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-By default, the API allows browser requests from `http://localhost:3000` and `http://127.0.0.1:3000`. To use another frontend origin, set a comma-separated backend environment variable before starting FastAPI:
+API CORS defaults to `http://localhost:3000` and `http://127.0.0.1:3000`. Additional origins can be configured with `BACKTESTER_CORS_ORIGINS`.
 
-```bash
-BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
-```
+## Strategy Support
 
-### Backend Environment Variables
+### Momentum SMA Crossover
 
-For local backend configuration, copy the committed template to a private repo-root `.env` file:
+Uses fast and slow simple moving averages on close prices.
+
+- Buy when the fast SMA crosses above the slow SMA.
+- Sell when the fast SMA crosses below the slow SMA.
+
+### Mean Reversion
+
+Uses Bollinger-style bands around a rolling mean.
+
+- Buy when price is at or below the lower band.
+- Sell when price is at or above the upper band.
+
+### Rule-Based Strategy
+
+Uses a constrained, validated rule specification instead of generated code.
+
+Supported indicators:
+
+- `close`
+- `sma`
+- `rolling_high`
+- `rolling_low`
+- `bollinger_upper`
+- `bollinger_lower`
+
+Supported operators:
+
+- `>`
+- `<`
+- `>=`
+- `<=`
+- `crosses_above`
+- `crosses_below`
+
+Entry conditions use `ALL` logic. Exit conditions use `ANY` logic. Rule-based drafts currently compile to single-run backtest requests, not grid-search optimization.
+
+## AI Provider Configuration
+
+AI Builder is safe by default. Without real provider environment variables, it uses a deterministic fake provider for local demos and tests.
+
+To configure OpenRouter or another backend AI provider, create a private repo-root `.env` from the committed template:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-The FastAPI backend automatically loads `.env` on startup. Restart `python -m uvicorn backtester.api.main:app --reload` after changing backend environment variables so the process sees the updated values. The `.env` file is gitignored and must never be committed. Keep API keys backend-only: do not put `BACKTESTER_AI_API_KEY` or any other backend AI secret in `frontend/.env.local`, and never prefix backend secrets with `NEXT_PUBLIC_`.
-
-### AI Builder Provider Configuration
-
-AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into OpenRouter, create an OpenRouter account, generate an API key from [OpenRouter Keys](https://openrouter.ai/settings/keys), and configure these variables in the backend `.env` file before starting FastAPI. Do not put these values in `frontend/.env.local`.
-
-For local setup, copy the committed backend template to a private env file and replace the placeholder API key:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-The `.env` file is gitignored and should never be committed. `.env.example` is safe to commit because it contains placeholders only. API keys must remain backend-only; frontend env files such as `frontend/.env.local` must not contain `BACKTESTER_AI_API_KEY` or any other backend AI secret.
+Example backend `.env` configuration:
 
 ```bash
 BACKTESTER_AI_ENABLED=true
@@ -255,97 +376,23 @@ BACKTESTER_AI_APP_NAME=Backtest Lab
 BACKTESTER_AI_APP_URL=http://localhost:3000
 ```
 
-Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, `openai_compatible`, and `langchain_openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` disables the OpenAI-style `response_format` request field for providers or free models that reject it; the backend still requires JSON-only responses, strict Pydantic validation, raw-code rejection, and inert compile-only output. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
+Supported provider values:
 
-The optional LangChain path is selected with `BACKTESTER_AI_PROVIDER=langchain_openai_compatible`. It reuses `BACKTESTER_AI_MODEL`, `BACKTESTER_AI_API_KEY`, `BACKTESTER_AI_BASE_URL`, and `BACKTESTER_AI_TIMEOUT_SECONDS`, then calls LangChain's `ChatOpenAI.with_structured_output(StrategyDraft)` adapter before the existing normalization, Pydantic validation, semantic validation, and compile-only handoff. Install it only when needed with `python -m pip install ".[ai-langchain]"` or `python -m pip install -r requirements-ai-langchain.txt`. If the extra is not installed, the backend reports a sanitized configuration error only when that provider is selected.
-
-If you prefer not to use `.env`, you can still set the backend env vars manually in the same terminal that starts FastAPI:
-
-```powershell
-$env:BACKTESTER_AI_ENABLED="true"
-$env:BACKTESTER_AI_PROVIDER="openrouter"
-$env:BACKTESTER_AI_MODEL="tencent/hy3-preview:free"
-$env:BACKTESTER_AI_API_KEY="your_openrouter_api_key_here"
-$env:BACKTESTER_AI_BASE_URL="https://openrouter.ai/api/v1"
-$env:BACKTESTER_AI_TIMEOUT_SECONDS="30"
-$env:BACKTESTER_AI_USE_RESPONSE_FORMAT="true"
-$env:BACKTESTER_AI_APP_NAME="Backtest Lab"
-$env:BACKTESTER_AI_APP_URL="http://localhost:3000"
-python -m uvicorn backtester.api.main:app --reload
+```text
+fake
+deepseek
+openrouter
+openai_compatible
+langchain_openai_compatible
 ```
 
-In a second terminal, start the frontend with only public browser configuration:
+The optional LangChain provider requires `langchain-openai`, available through `python -m pip install ".[ai-langchain]"` or `python -m pip install -r requirements-ai-langchain.txt`.
 
-```bash
-cd frontend
-npm run dev
-```
-
-Open `http://localhost:3000`, switch to AI Builder, and test with a prompt such as `Run AAPL from 2020 to 2023 using a 20/100 SMA crossover`. Review the generated draft, then load it into the existing workflow form. Loading a compiled request does not run the backtest automatically.
-
-API keys stay on the FastAPI server and are never sent to the browser. Never commit real keys, never paste them into `frontend/.env.local`, and never prefix them with `NEXT_PUBLIC_`. OpenRouter free models may be rate-limited, temporarily unavailable, or lower quality than paid models.
-
-AI outputs are treated as untrusted. The API parses JSON only, rejects raw code-looking responses and unexpected fields, validates drafts with Pydantic plus `backtester/ai/validator.py`, and compiles only into existing request schemas. Rule-based drafts use a strict DSL with supported indicators (`close`, `sma`, `rolling_high`, `rolling_low`, `bollinger_upper`, `bollinger_lower`) and operators (`>`, `<`, `>=`, `<=`, `crosses_above`, `crosses_below`). Research Copilot approval can run one existing local research workflow only after an explicit matching action. It never executes generated code, never places trades, and does not provide investment advice.
-
-### AI Strategy Builder Output Requirements
-
-Real AI providers must return JSON only, with no markdown or explanatory text outside the JSON object. Drafts are validated against the strict `StrategyDraft` schema with `extra="forbid"`: unsupported fields such as `equity_sizing`, arbitrary formulas, generated code, alternate rule formats, and unknown indicators/operators are rejected.
-
-The backend includes a small safe normalization pass before validation for common free-model formatting mistakes. It can convert unambiguous `benchmark` strings (`"yes"`, `"true"`, `"no"`, `"false"`) into booleans, map clearly structured `equity_sizing` objects into `position_size_method` plus `position_size_value`, and convert a narrow `rule_spec.conditions` shape into the internal `rule_spec.rules` DSL only when every referenced indicator and condition validates. Ambiguous or unsupported structures are left unchanged and fail validation.
-
-Free LLMs may produce imperfect JSON or schema-adjacent fields. The system corrects only simple deterministic cases, keeps JSON-only parsing and raw-code rejection, and preserves the strict validation boundary before any compile handoff.
-
-## Local API + Frontend Workflow
-
-1. Start the API from the repo root:
-
-   ```bash
-   python -m uvicorn backtester.api.main:app --reload
-   ```
-
-2. In a second terminal, start the frontend:
-
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-3. Open `http://localhost:3000`.
-4. Use the default AAPL Momentum SMA setup or switch between Single Run, Grid Search, Walk-Forward, and AI Builder modes.
-5. Run a backtest and inspect equity, drawdown, trades, risk, metrics, and parameters.
-6. Run grid search to compare parameter combinations, inspect robustness warnings, export CSV, and promote a selected row into a single backtest.
-7. Run walk-forward validation to compare train and out-of-sample test performance by fold.
-8. Use AI Builder to draft a supported strategy idea, review assumptions and warnings, then load the compiled request into an existing form before running it.
-9. Use Research Copilot to plan a research goal, inspect the graph state and compiled payload, explicitly approve one backend workflow run, and review deterministic analysis before changing parameters.
-
-yfinance may require network access unless the requested data is already cached.
-
-## Research Copilot Local Demo
-
-1. Start FastAPI from the repo root:
-
-   ```bash
-   python -m uvicorn backtester.api.main:app --reload
-   ```
-
-2. Start Backtest Lab in a second terminal:
-
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-3. Open `http://localhost:3000` and switch to Research Copilot.
-4. Submit: `Find a robust AAPL momentum strategy from 2018 to 2023 and compare against buy-and-hold`.
-5. Review the graph steps, inferred draft, warnings, and compiled payload JSON.
-6. Approve exactly one workflow run with the enabled approval button.
-7. Inspect the returned workflow summary, deterministic analysis, and recommended next step.
-
-The demo remains local and single-asset. Research Copilot uses LangGraph for backend state transitions and LangChain only when the optional structured-output provider is selected. It never exposes backend AI keys to the browser, never runs generated code, and never calls a workflow before explicit matching approval.
+API keys must remain backend-only. Do not put backend AI keys in `frontend/.env.local`, and do not prefix backend secrets with `NEXT_PUBLIC_`.
 
 ## Python Usage
 
-Single-asset example:
+Single-asset backtest:
 
 ```python
 from backtester.data.loader import DataLoader
@@ -353,7 +400,12 @@ from backtester.engine import BacktestConfig, BacktestEngine
 from backtester.metrics import generate_report, print_report
 from backtester.strategy import MomentumStrategy
 
-config = BacktestConfig(ticker="AAPL", start_date="2018-01-01", end_date="2023-12-31")
+config = BacktestConfig(
+    ticker="AAPL",
+    start_date="2018-01-01",
+    end_date="2023-12-31",
+)
+
 engine = BacktestEngine(
     loader=DataLoader(),
     strategy=MomentumStrategy(fast_window=10, slow_window=50),
@@ -364,7 +416,7 @@ result = engine.run()
 print_report(generate_report(result))
 ```
 
-Multi-asset example:
+Multi-asset backtest from Python:
 
 ```python
 from backtester.data.loader import DataLoader
@@ -376,11 +428,19 @@ config = MultiAssetBacktestConfig(
     start_date="2020-01-01",
     end_date="2023-12-31",
 )
-strategy = SingleStrategyMultiAssetWrapper(lambda: MomentumStrategy(10, 50))
-result = MultiAssetBacktestEngine(DataLoader(), strategy, config).run()
+
+strategy = SingleStrategyMultiAssetWrapper(
+    lambda: MomentumStrategy(fast_window=10, slow_window=50)
+)
+
+result = MultiAssetBacktestEngine(
+    loader=DataLoader(),
+    strategy=strategy,
+    config=config,
+).run()
 ```
 
-Multi-asset support is available in the Python engine. It is not currently exposed in the FastAPI endpoint, CLI, or Backtest Lab UI.
+Multi-asset support is available in the Python engine. It is not currently exposed through FastAPI, the CLI, or Backtest Lab.
 
 ## CLI
 
@@ -390,54 +450,13 @@ python -m backtester.cli run --ticker AAPL --strategy momentum --start 2020-01-0
 python -m backtester.cli grid-search --ticker AAPL --start 2020-01-01 --end 2023-12-31 --fast-windows 5,10 --slow-windows 30,50
 ```
 
-The CLI uses live/cached `DataLoader` data. Example scripts use synthetic data where practical to avoid network surprises.
+The CLI uses live or cached data from `DataLoader`.
 
-## Strategies
+## Testing and CI
 
-- `MomentumStrategy`
-  - Uses fast and slow simple moving averages on close prices.
-  - Buys when the fast SMA crosses above the slow SMA.
-  - Sells when the fast SMA crosses below the slow SMA.
-- `MeanReversionStrategy`
-  - Uses Bollinger-style bands around a rolling mean.
-  - Buys when price is at or below the lower band.
-  - Sells when price is at or above the upper band.
-- `RuleBasedStrategy`
-  - Uses constrained, Pydantic-validated rule specs instead of generated code.
-  - V1 supports close, SMA, prior rolling high/low, and Bollinger upper/lower indicators.
-  - Entry conditions are combined with ALL logic; exit conditions use ANY logic.
-  - Currently intended for AI Builder single-run handoff, not grid-search optimization.
-- `SingleStrategyMultiAssetWrapper`
-  - Applies a single-asset strategy factory across multiple tickers for Python-side multi-asset runs.
+CI runs Python and frontend quality gates:
 
-## Visualization And Screenshots
-
-Matplotlib helpers live in `backtester/viz/`:
-
-- `plot_equity_curve`
-- `plot_drawdown`
-- `plot_trades`
-- `plot_strategy_comparison`
-
-Generate example chart PNGs:
-
-```bash
-python examples/generate_charts.py
-```
-
-Backtest Lab screenshot assets are not currently committed. Regenerate dashboard screenshots or GIFs on demand for portfolio materials:
-
-1. Start the API and frontend.
-2. Capture the Single Run default AAPL view after a completed run.
-3. Capture Grid Search after the default parameter sweep and the leaderboard/heatmap are visible.
-4. Capture Walk-Forward after the fold table and aggregate summary are visible.
-5. Keep generated screenshots small and intentional if they are later committed.
-
-## Testing And CI
-
-Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
-
-- Install Python 3.11 dependencies from `requirements.txt`.
+- Install Python dependencies.
 - Run `python -m pytest`.
 - Run `python -m mypy backtester`.
 - Install frontend dependencies with `npm ci`.
@@ -446,33 +465,51 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 - Run `npm run typecheck`.
 - Run `npm run build`.
 
-## Known Limitations
+Core tests use deterministic synthetic data where practical to avoid unnecessary network dependence. yfinance-backed CLI, API, and browser runs may require network access unless data is cached.
 
-- Backtest Lab research workflows are still single-asset only.
-- Research Copilot is available in Backtest Lab through request/response state passing. It has no server-side session persistence.
-- Research Copilot approval state is browser-passed JSON, so it should be treated as local demo state rather than durable audit storage. The backend revalidates the compiled payload on approval and blocks malformed or mismatched payloads.
-- AI Strategy Builder uses a fake deterministic provider by default and can call opt-in server-side OpenAI-compatible, OpenRouter, or LangChain OpenAI-compatible providers when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. Rule-based DSL support is intentionally small: no generated Python, EMA/RSI, arbitrary formulas, multi-asset rules, or rule-grid optimization yet. The frontend can review and load compiled configs, but it does not run them automatically.
-- The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
-- Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
+## Current Limitations
+
+- Backtest Lab research workflows are single-asset only.
+- Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
+- Research Copilot uses request/response state passing and has no server-side session persistence.
 - No authentication.
-- No database or saved run persistence.
+- No database or saved-run persistence.
 - No broker integration.
 - No live trading or order placement.
 - No paid data feed integration.
 - yfinance-backed workflows may require network access unless data is cached.
+- Rule-based AI strategy support is intentionally limited in v1.
+- Walk-forward results are currently table-first; richer visualizations can be added later.
+- Dashboard screenshots/GIFs are not committed yet.
 - Benchmark documentation still lacks a measured pre-optimization baseline comparison.
-- The frontend uses an npm override to keep Next's nested PostCSS dependency on a patched 8.5.x release until Next publishes a stable line that no longer needs the override.
+- A license should be added before public publishing.
 
-## Tech Stack
+## Roadmap
 
-- Python 3.11+
-- pandas, numpy
-- yfinance, pyarrow
-- FastAPI, Pydantic, Uvicorn
-- matplotlib
-- pytest, pytest-cov, mypy
-- Next.js App Router
-- React, TypeScript
-- Tailwind CSS
-- Recharts
-- lucide-react
+Potential next improvements:
+
+- Expose multi-asset backtests through FastAPI, CLI, and Backtest Lab.
+- Add persisted saved runs and research history.
+- Add richer walk-forward visualizations.
+- Add dashboard screenshots and GIF demo assets.
+- Add benchmark documentation with a measured pre-optimization baseline.
+- Expand the constrained rule DSL with additional indicators, OR logic, and grouped rules.
+- Add deployment configuration for a public demo environment.
+
+## Portfolio Highlights
+
+This project demonstrates:
+
+- Modular Python backend architecture.
+- Event-driven simulation design.
+- Financial portfolio accounting.
+- From-scratch quantitative metric implementation.
+- API design with FastAPI and Pydantic.
+- Full-stack dashboard development with Next.js and TypeScript.
+- Safe AI system design with strict validation boundaries.
+- Agentic workflow orchestration through graph-based state transitions.
+- Testing, typing, and CI practices expected in production codebases.
+
+## License
+
+No license is currently declared. Add one before publishing this repository publicly.
