@@ -67,11 +67,33 @@ Backtester/
 
 ## Quick Start
 
-Install Python dependencies:
+### Python Setup
 
-```bash
+Use a repo-root virtual environment for local development. The `.venv/` directory is ignored by Git and should never be committed.
+
+Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.venv\Scripts\Activate
 python -m pip install -r requirements.txt
 ```
+
+macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+When you are done, leave the environment with:
+
+```bash
+deactivate
+```
+
+The `.venv/` directory is gitignored and should stay local. Backend `.env` files are also gitignored; never commit `.env` or put backend AI keys in frontend env files.
 
 Run Python validation:
 
@@ -189,18 +211,53 @@ BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 
 ### AI Builder Provider Configuration
 
-AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into a real server-side OpenAI-compatible chat completion provider, configure the backend before starting FastAPI:
+AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into OpenRouter, create an OpenRouter account, generate an API key from [OpenRouter Keys](https://openrouter.ai/settings/keys), and configure these variables in the backend/server environment before starting FastAPI. Do not put these values in `frontend/.env.local`.
+
+For local setup, copy the committed backend template to a private env file and replace the placeholder API key:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The `.env` file is gitignored and should never be committed. `.env.example` is safe to commit because it contains placeholders only. API keys must remain backend-only; frontend env files such as `frontend/.env.local` must not contain `BACKTESTER_AI_API_KEY` or any other backend AI secret.
 
 ```bash
 BACKTESTER_AI_ENABLED=true
-BACKTESTER_AI_PROVIDER=deepseek
-BACKTESTER_AI_MODEL=deepseek-chat
-BACKTESTER_AI_API_KEY=
-BACKTESTER_AI_BASE_URL=
+BACKTESTER_AI_PROVIDER=openrouter
+BACKTESTER_AI_MODEL=tencent/hy3-preview:free
+BACKTESTER_AI_API_KEY=your_openrouter_api_key_here
+BACKTESTER_AI_BASE_URL=https://openrouter.ai/api/v1
 BACKTESTER_AI_TIMEOUT_SECONDS=30
+BACKTESTER_AI_APP_NAME=Backtest Lab
+BACKTESTER_AI_APP_URL=http://localhost:3000
 ```
 
-Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, and `openai_compatible`. `BACKTESTER_AI_BASE_URL` is optional for built-in defaults, but useful for OpenAI-compatible endpoints. API keys stay on the FastAPI server and are never sent to the browser. Do not put `BACKTESTER_AI_API_KEY` in `frontend/.env.local`.
+Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, and `openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
+
+On PowerShell, set the backend env vars in the same terminal that starts FastAPI:
+
+```powershell
+$env:BACKTESTER_AI_ENABLED="true"
+$env:BACKTESTER_AI_PROVIDER="openrouter"
+$env:BACKTESTER_AI_MODEL="tencent/hy3-preview:free"
+$env:BACKTESTER_AI_API_KEY="your_openrouter_api_key_here"
+$env:BACKTESTER_AI_BASE_URL="https://openrouter.ai/api/v1"
+$env:BACKTESTER_AI_TIMEOUT_SECONDS="30"
+$env:BACKTESTER_AI_APP_NAME="Backtest Lab"
+$env:BACKTESTER_AI_APP_URL="http://localhost:3000"
+python -m uvicorn backtester.api.main:app --reload
+```
+
+In a second terminal, start the frontend with only public browser configuration:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open `http://localhost:3000`, switch to AI Builder, and test with a prompt such as `Run AAPL from 2020 to 2023 using a 20/100 SMA crossover`. Review the generated draft, then load it into the existing workflow form. Loading a compiled request does not run the backtest automatically.
+
+API keys stay on the FastAPI server and are never sent to the browser. Never commit real keys, never paste them into `frontend/.env.local`, and never prefix them with `NEXT_PUBLIC_`. OpenRouter free models may be rate-limited, temporarily unavailable, or lower quality than paid models.
 
 AI outputs are treated as untrusted. The API parses JSON only, rejects raw code-looking responses and unexpected fields, validates drafts with Pydantic plus `backtester/ai/validator.py`, and compiles only into existing request schemas. Rule-based drafts use a strict DSL with supported indicators (`close`, `sma`, `rolling_high`, `rolling_low`, `bollinger_upper`, `bollinger_lower`) and operators (`>`, `<`, `>=`, `<=`, `crosses_above`, `crosses_below`). It never executes generated code, never places trades, and does not provide investment advice.
 

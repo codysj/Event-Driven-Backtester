@@ -4,6 +4,7 @@
 
 - AI Strategy Builder backend skeleton added:
   - `backtester/ai/` schemas, prompt template, provider abstraction/factory, deterministic fake provider, optional OpenAI-compatible provider, validator, and compilers.
+  - OpenRouter is available as a first-class backend provider with default model `tencent/hy3-preview:free`, server-side bearer auth, chat-completions requests, and optional app attribution headers.
   - `POST /api/ai/strategy-draft` returns inert, validated draft JSON. Fake remains the default provider; real providers are server-side opt-in through env vars.
   - `POST /api/ai/compile` compiles reviewed drafts into existing Backtest, Grid Search, and Walk-Forward request payloads.
   - Backtest Lab AI Builder UI now drafts from prompts, previews assumptions/warnings/unsupported items, compiles drafts, and loads compiled configs into existing workflow forms.
@@ -27,6 +28,7 @@ The latest research-workstation batch added:
 - Add backend export endpoints only if frontend-side CSV/JSON export becomes insufficient.
 - Add a local Python interpreter/venv setup note or script for Windows workspaces where `python` is not on PATH.
 - Measure a pre-optimization benchmark baseline and update `docs/benchmark_results.md`.
+- Revisit AI Builder provider quality if OpenRouter free-model rate limits or availability become noisy during demos.
 
 ## Later
 

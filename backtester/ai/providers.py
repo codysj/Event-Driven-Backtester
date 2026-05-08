@@ -38,6 +38,9 @@ DEFAULT_OPENAI_COMPATIBLE_BASE_URL = "https://api.openai.com/v1"
 DEFAULT_OPENAI_COMPATIBLE_MODEL = "gpt-4o-mini"
 DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEFAULT_DEEPSEEK_MODEL = "deepseek-chat"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_OPENROUTER_MODEL = "tencent/hy3-preview:free"
+DEFAULT_OPENROUTER_APP_NAME = "Backtest Lab"
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 30.0
 
 
@@ -63,6 +66,8 @@ class StrategyDraftProviderConfig:
     api_key: str | None = None
     base_url: str | None = None
     timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS
+    app_name: str | None = None
+    app_url: str | None = None
 
 
 class LLMProvider(Protocol):
@@ -349,6 +354,7 @@ class OpenAICompatibleStrategyDraftProvider:
         timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
         http_client: HttpChatClient | None = None,
         provider_name: str = "openai_compatible",
+        extra_headers: Mapping[str, str] | None = None,
     ) -> None:
         if not api_key.strip():
             raise ProviderConfigurationError("BACKTESTER_AI_API_KEY is required for real AI providers.")
@@ -360,6 +366,7 @@ class OpenAICompatibleStrategyDraftProvider:
         self.timeout_seconds = timeout_seconds
         self.http_client = http_client
         self.provider_name = provider_name
+        self.extra_headers = dict(extra_headers or {})
 
     def draft_strategy(self, request: StrategyDraftRequest) -> ProviderDraft:
         """Request a structured draft from an OpenAI-compatible chat endpoint."""
@@ -381,6 +388,7 @@ class OpenAICompatibleStrategyDraftProvider:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            **self.extra_headers,
         }
         try:
             response = self._send_post(url, headers, payload)
@@ -441,6 +449,14 @@ def get_strategy_draft_provider(
             default_model=DEFAULT_DEEPSEEK_MODEL,
             provider_name="deepseek",
         )
+    if provider == "openrouter":
+        return _openai_compatible_provider(
+            config,
+            default_base_url=DEFAULT_OPENROUTER_BASE_URL,
+            default_model=DEFAULT_OPENROUTER_MODEL,
+            provider_name="openrouter",
+            extra_headers=_openrouter_headers(config),
+        )
     if provider == "openai_compatible":
         return _openai_compatible_provider(
             config,
@@ -450,7 +466,7 @@ def get_strategy_draft_provider(
         )
 
     raise ProviderConfigurationError(
-        "Unsupported BACKTESTER_AI_PROVIDER. Use fake, deepseek, or openai_compatible."
+        "Unsupported BACKTESTER_AI_PROVIDER. Use fake, deepseek, openrouter, or openai_compatible."
     )
 
 
@@ -469,7 +485,7 @@ def draft_strategy_from_request(
         return StrategyDraftResponse(
             draft=None,
             status=StrategyDraftStatus.NEEDS_CLARIFICATION,
-            warnings=["AI provider is not configured for strategy drafting."],
+            warnings=["AI provider is not configured on the backend."],
             unsupported=[],
             validation_errors=[str(exc)],
         )
@@ -480,7 +496,7 @@ def draft_strategy_from_request(
         return StrategyDraftResponse(
             draft=None,
             status=StrategyDraftStatus.NEEDS_CLARIFICATION,
-            warnings=["AI provider is not configured for strategy drafting."],
+            warnings=["AI provider is not configured on the backend."],
             unsupported=[],
             validation_errors=[str(exc)],
         )
@@ -546,6 +562,8 @@ def _provider_config_from_env(env: Mapping[str, str]) -> StrategyDraftProviderCo
         api_key=_optional_env(env.get("BACKTESTER_AI_API_KEY")),
         base_url=_optional_env(env.get("BACKTESTER_AI_BASE_URL")),
         timeout_seconds=timeout_seconds,
+        app_name=_optional_env(env.get("BACKTESTER_AI_APP_NAME")),
+        app_url=_optional_env(env.get("BACKTESTER_AI_APP_URL")),
     )
 
 
@@ -555,6 +573,7 @@ def _openai_compatible_provider(
     default_base_url: str,
     default_model: str,
     provider_name: str,
+    extra_headers: Mapping[str, str] | None = None,
 ) -> OpenAICompatibleStrategyDraftProvider:
     if config.api_key is None:
         raise ProviderConfigurationError(
@@ -566,7 +585,15 @@ def _openai_compatible_provider(
         base_url=config.base_url or default_base_url,
         timeout_seconds=config.timeout_seconds,
         provider_name=provider_name,
+        extra_headers=extra_headers,
     )
+
+
+def _openrouter_headers(config: StrategyDraftProviderConfig) -> dict[str, str]:
+    headers = {"X-OpenRouter-Title": config.app_name or DEFAULT_OPENROUTER_APP_NAME}
+    if config.app_url is not None:
+        headers["HTTP-Referer"] = config.app_url
+    return headers
 
 
 def _parse_bool_env(raw: str | None, *, default: bool) -> bool:

@@ -16,9 +16,13 @@ Durable instructions for Codex and other coding agents working in this repo.
 
 Python setup:
 
-```bash
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate
 python -m pip install -r requirements.txt
 ```
+
+Create `.venv` locally and activate it before running validation. Never commit `.venv/`, `venv/`, or generated environment files.
 
 Python validation:
 

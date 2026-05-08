@@ -342,6 +342,42 @@ def test_provider_factory_selects_real_provider_from_env() -> None:
     assert provider.timeout_seconds == 3
 
 
+def test_provider_factory_selects_openrouter_with_safe_defaults() -> None:
+    provider = get_strategy_draft_provider(
+        {
+            "BACKTESTER_AI_ENABLED": "true",
+            "BACKTESTER_AI_PROVIDER": "openrouter",
+            "BACKTESTER_AI_API_KEY": "sk-test-secret",
+        },
+        prefer_fake_in_tests=False,
+    )
+
+    assert isinstance(provider, OpenAICompatibleStrategyDraftProvider)
+    assert provider.provider_name == "openrouter"
+    assert provider.model == "tencent/hy3-preview:free"
+    assert provider.base_url == "https://openrouter.ai/api/v1"
+    assert provider.extra_headers == {"X-OpenRouter-Title": "Backtest Lab"}
+
+
+def test_provider_factory_openrouter_uses_app_attribution_env() -> None:
+    provider = get_strategy_draft_provider(
+        {
+            "BACKTESTER_AI_ENABLED": "true",
+            "BACKTESTER_AI_PROVIDER": "openrouter",
+            "BACKTESTER_AI_API_KEY": "sk-test-secret",
+            "BACKTESTER_AI_APP_NAME": "Local Strategy Lab",
+            "BACKTESTER_AI_APP_URL": "http://localhost:3000",
+        },
+        prefer_fake_in_tests=False,
+    )
+
+    assert isinstance(provider, OpenAICompatibleStrategyDraftProvider)
+    assert provider.extra_headers == {
+        "X-OpenRouter-Title": "Local Strategy Lab",
+        "HTTP-Referer": "http://localhost:3000",
+    }
+
+
 def test_provider_factory_missing_api_key_is_clear() -> None:
     with pytest.raises(ProviderConfigurationError, match="BACKTESTER_AI_API_KEY"):
         get_strategy_draft_provider(
@@ -349,6 +385,17 @@ def test_provider_factory_missing_api_key_is_clear() -> None:
                 "BACKTESTER_AI_ENABLED": "true",
                 "BACKTESTER_AI_PROVIDER": "deepseek",
                 "BACKTESTER_AI_MODEL": "deepseek-chat",
+            },
+            prefer_fake_in_tests=False,
+        )
+
+
+def test_provider_factory_openrouter_missing_api_key_is_clear() -> None:
+    with pytest.raises(ProviderConfigurationError, match="BACKTESTER_AI_API_KEY"):
+        get_strategy_draft_provider(
+            {
+                "BACKTESTER_AI_ENABLED": "true",
+                "BACKTESTER_AI_PROVIDER": "openrouter",
             },
             prefer_fake_in_tests=False,
         )
@@ -364,7 +411,7 @@ def test_draft_response_reports_provider_configuration_error(monkeypatch) -> Non
 
     assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
     assert response.draft is None
-    assert response.warnings == ["AI provider is not configured for strategy drafting."]
+    assert response.warnings == ["AI provider is not configured on the backend."]
     assert response.validation_errors == [
         "BACKTESTER_AI_API_KEY is required when BACKTESTER_AI_PROVIDER=deepseek."
     ]
@@ -409,6 +456,21 @@ def real_provider(client: StaticChatClient) -> OpenAICompatibleStrategyDraftProv
     )
 
 
+def openrouter_provider(client: StaticChatClient) -> OpenAICompatibleStrategyDraftProvider:
+    return OpenAICompatibleStrategyDraftProvider(
+        api_key="sk-test-secret",
+        model="tencent/hy3-preview:free",
+        base_url="https://openrouter.ai/api/v1",
+        timeout_seconds=1,
+        http_client=client,
+        provider_name="openrouter",
+        extra_headers={
+            "X-OpenRouter-Title": "Backtest Lab",
+            "HTTP-Referer": "http://localhost:3000",
+        },
+    )
+
+
 def test_real_provider_sends_system_prompt_and_validates_json() -> None:
     draft_json = {
         "target_mode": "single_run",
@@ -434,6 +496,38 @@ def test_real_provider_sends_system_prompt_and_validates_json() -> None:
     assert isinstance(messages, list)
     assert messages[0]["role"] == "system"
     assert "Never generate executable code" in messages[0]["content"]
+
+
+def test_openrouter_provider_posts_chat_completions_with_auth_model_and_attribution() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "strategy_kind": "momentum",
+        "parameters": {"fast_window": 20, "slow_window": 100},
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(
+        request("Run AAPL using a 20/100 SMA crossover."),
+        openrouter_provider(http_client),
+    )
+
+    assert response.status == StrategyDraftStatus.READY
+    assert len(http_client.requests) == 1
+    captured = http_client.requests[0]
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    headers = captured["headers"]
+    assert isinstance(headers, dict)
+    assert headers["Authorization"] == "Bearer sk-test-secret"
+    assert headers["Content-Type"] == "application/json"
+    assert headers["X-OpenRouter-Title"] == "Backtest Lab"
+    assert headers["HTTP-Referer"] == "http://localhost:3000"
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    assert payload["model"] == "tencent/hy3-preview:free"
 
 
 def test_real_provider_timeout_is_handled_cleanly() -> None:

@@ -279,6 +279,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - The Next.js frontend calls `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000`.
 - No database, auth provider, broker API, payment system, paid data feed, or live trading integration is present.
 - The AI Strategy Builder uses a deterministic fake provider by default. Optional real provider support uses server-side OpenAI-compatible chat completion calls only when `BACKTESTER_AI_PROVIDER` and server-side credentials are configured.
+- OpenRouter is supported as a first-class backend AI provider with `BACKTESTER_AI_PROVIDER=openrouter`. It calls `POST https://openrouter.ai/api/v1/chat/completions` by default, uses bearer auth from `BACKTESTER_AI_API_KEY`, defaults to `tencent/hy3-preview:free`, and can send backend-only attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`.
 
 ## Configuration And Environment
 
@@ -293,11 +294,17 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Additional API CORS origins can be configured with comma-separated `BACKTESTER_CORS_ORIGINS`.
 - AI Builder backend env vars:
   - `BACKTESTER_AI_ENABLED=true|false`
-  - `BACKTESTER_AI_PROVIDER=fake|deepseek|openai_compatible`
+  - `BACKTESTER_AI_PROVIDER=fake|deepseek|openrouter|openai_compatible`
   - `BACKTESTER_AI_MODEL`
   - `BACKTESTER_AI_API_KEY`
   - `BACKTESTER_AI_BASE_URL`
   - `BACKTESTER_AI_TIMEOUT_SECONDS`
+  - `BACKTESTER_AI_APP_NAME`
+  - `BACKTESTER_AI_APP_URL`
+- OpenRouter defaults:
+  - `BACKTESTER_AI_MODEL=tencent/hy3-preview:free`
+  - `BACKTESTER_AI_BASE_URL=https://openrouter.ai/api/v1`
+  - `BACKTESTER_AI_APP_NAME=Backtest Lab`
 - AI provider keys are backend-only. The frontend receives draft statuses, warnings, unsupported items, and validation errors, never API keys.
 - CI is `.github/workflows/ci.yml`; it installs Python requirements, runs `python -m pytest`, runs `python -m mypy backtester`, installs frontend dependencies with `npm ci`, runs `npm audit`, runs `npm run lint`, runs `npm run typecheck`, and runs `npm run build`.
 
@@ -311,7 +318,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
-- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder.
+- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder. OpenRouter support does not change this flow: draft JSON is validated, compiled only into existing API request payloads, and never executed automatically.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

@@ -69,8 +69,10 @@ Last documentation pass: 2026-05-07.
 - AI Strategy Builder backend foundation:
   - `backtester/ai/` package with strict Pydantic draft schemas.
   - Prompt template that requires structured JSON and forbids executable code.
-  - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, and optional OpenAI-compatible provider implementation.
-  - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, and timeout. No API key is exposed to the frontend.
+  - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, optional OpenAI-compatible provider implementation, and first-class OpenRouter selection through `BACKTESTER_AI_PROVIDER=openrouter`.
+  - OpenRouter defaults to `https://openrouter.ai/api/v1`, `POST /chat/completions`, and model `tencent/hy3-preview:free`, with optional backend attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`.
+  - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, timeout, app name, and app URL. No API key is exposed to the frontend.
+  - Repo-root `.env.example` is committed as a placeholder-only OpenRouter template. Local `.env` and `.env.*` files are gitignored, while `.env.example` remains tracked.
   - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
   - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads, including rule-based single-run payloads with `rule_spec`.
   - API endpoints return draft/compile status, warnings, unsupported items, and validation errors without executing workflows. Fake remains the default provider, including tests.
@@ -94,11 +96,12 @@ Last documentation pass: 2026-05-07.
   - Risk tab and frontend exports for trades CSV, metrics JSON, config JSON, and grid-search CSV.
   - Reproducibility view for submitted config and strategy parameters.
 - Examples, benchmark scripts, tests, mypy config, Python CI, and frontend CI checks.
+- Local Python development should use a repo-root `.venv`. The `.venv/`, `venv/`, and `env/` directories are gitignored and should never be committed. Validation commands should be run from the activated environment.
 
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- AI Strategy Builder can optionally call a real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1.
+- AI Strategy Builder can optionally call OpenRouter or another real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1. OpenRouter free models may be rate-limited, temporarily unavailable, or lower quality than paid models.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
@@ -120,7 +123,8 @@ Last documentation pass: 2026-05-07.
 - Backtest Lab should use a Node.js runtime compatible with Next's engine range: `^18.18.0`, `^19.8.0`, or `>=20.0.0`.
 - Core tests should remain deterministic and avoid live yfinance/network calls unless explicitly testing mocked loader behavior.
 - yfinance-backed CLI/API/browser runs may require network or existing cache.
-- Generated Python bytecode, pytest/mypy caches, frontend build output, and `node_modules` should remain untracked.
+- Generated Python bytecode, pytest/mypy caches, local virtual environments, frontend build output, and `node_modules` should remain untracked.
+- In Windows workspaces where `python` is unavailable on PATH, install Python 3.11+ and create/activate `.venv` with `py -m venv .venv`; after activation, rerun validation through `python -m pytest` and `python -m mypy backtester`.
 
 ## Recommended Next Tasks
 

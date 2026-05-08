@@ -48,6 +48,19 @@ export function AiBuilderPanel({ onLoadCompiled }: AiBuilderPanelProps) {
 
   const draft = draftResponse?.draft ?? null;
   const canShowJson = useMemo(() => draftResponse !== null || compileResponse !== null, [draftResponse, compileResponse]);
+  const noDraftMessages = useMemo(
+    () =>
+      draftResponse && !draftResponse.draft
+        ? Array.from(
+            new Set([
+              ...draftResponse.warnings,
+              ...draftResponse.validation_errors,
+              ...draftResponse.unsupported
+            ])
+          )
+        : [],
+    [draftResponse]
+  );
 
   async function submitPrompt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -166,10 +179,20 @@ export function AiBuilderPanel({ onLoadCompiled }: AiBuilderPanelProps) {
         />
       ) : !isDrafting ? (
         <section className="rounded-xl border border-lab-border bg-lab-surface p-6">
-          <h2 className="text-base font-semibold text-lab-text">No Draft Yet</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-lab-secondary">
-            Generate a draft to inspect inferred dates, strategy parameters, costs, warnings, unsupported items, and compile-ready JSON.
-          </p>
+          <h2 className="text-base font-semibold text-lab-text">
+            {draftResponse ? "Draft Not Available" : "No Draft Yet"}
+          </h2>
+          {noDraftMessages.length > 0 ? (
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-100">
+              {noDraftMessages.map((message) => (
+                <li key={message}>{message}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-lab-secondary">
+              Generate a draft to inspect inferred dates, strategy parameters, costs, warnings, unsupported items, and compile-ready JSON.
+            </p>
+          )}
         </section>
       ) : null}
 
