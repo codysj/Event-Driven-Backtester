@@ -31,7 +31,7 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 - Trade-level analytics.
 - Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
 - Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
-- Safe AI Strategy Builder foundation that turns natural-language prompts into inert, validated strategy drafts and compiles them into existing API-compatible request payloads using a deterministic fake provider by default, with optional server-side OpenAI-compatible provider support and a constrained rule-based strategy DSL.
+- Safe AI Strategy Builder foundation that turns natural-language prompts into inert, validated strategy drafts and compiles them into existing API-compatible request payloads using a deterministic fake provider by default, with optional server-side OpenAI-compatible, OpenRouter, and LangChain structured-output provider support plus a constrained rule-based strategy DSL.
 - Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
 - Matplotlib chart helpers.
 - CLI commands for single-asset backtests and grid searches.
@@ -243,7 +243,9 @@ BACKTESTER_AI_APP_NAME=Backtest Lab
 BACKTESTER_AI_APP_URL=http://localhost:3000
 ```
 
-Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, and `openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` disables the OpenAI-style `response_format` request field for providers or free models that reject it; the backend still requires JSON-only responses, strict Pydantic validation, raw-code rejection, and inert compile-only output. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
+Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, `openai_compatible`, and `langchain_openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` disables the OpenAI-style `response_format` request field for providers or free models that reject it; the backend still requires JSON-only responses, strict Pydantic validation, raw-code rejection, and inert compile-only output. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
+
+The optional LangChain path is selected with `BACKTESTER_AI_PROVIDER=langchain_openai_compatible`. It reuses `BACKTESTER_AI_MODEL`, `BACKTESTER_AI_API_KEY`, `BACKTESTER_AI_BASE_URL`, and `BACKTESTER_AI_TIMEOUT_SECONDS`, then calls LangChain's `ChatOpenAI.with_structured_output(StrategyDraft)` adapter before the existing normalization, Pydantic validation, semantic validation, and compile-only handoff. Install it only when needed with `python -m pip install ".[ai-langchain]"` or `python -m pip install -r requirements-ai-langchain.txt`. If the extra is not installed, the backend reports a sanitized configuration error only when that provider is selected.
 
 If you prefer not to use `.env`, you can still set the backend env vars manually in the same terminal that starts FastAPI:
 
@@ -411,7 +413,7 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 ## Known Limitations
 
 - Backtest Lab research workflows are still single-asset only.
-- AI Strategy Builder uses a fake deterministic provider by default and can call an opt-in server-side OpenAI-compatible provider when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. Rule-based DSL support is intentionally small: no generated Python, EMA/RSI, arbitrary formulas, multi-asset rules, or rule-grid optimization yet. The frontend can review and load compiled configs, but it does not run them automatically.
+- AI Strategy Builder uses a fake deterministic provider by default and can call opt-in server-side OpenAI-compatible, OpenRouter, or LangChain OpenAI-compatible providers when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. Rule-based DSL support is intentionally small: no generated Python, EMA/RSI, arbitrary formulas, multi-asset rules, or rule-grid optimization yet. The frontend can review and load compiled configs, but it does not run them automatically.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
 - Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
 - No authentication.

@@ -5,6 +5,7 @@
 - AI Strategy Builder backend skeleton added:
   - `backtester/ai/` schemas, prompt template, provider abstraction/factory, deterministic fake provider, optional OpenAI-compatible provider, validator, and compilers.
   - OpenRouter is available as a first-class backend provider with default model `tencent/hy3-preview:free`, server-side bearer auth, chat-completions requests, and optional app attribution headers.
+  - Optional LangChain structured-output provider path added with `BACKTESTER_AI_PROVIDER=langchain_openai_compatible`, using backend-only env vars and the existing `StrategyDraft` validation/normalization boundary.
   - `POST /api/ai/strategy-draft` returns inert, validated draft JSON. Fake remains the default provider; real providers are server-side opt-in through env vars.
   - `POST /api/ai/compile` compiles reviewed drafts into existing Backtest, Grid Search, and Walk-Forward request payloads.
   - Backtest Lab AI Builder UI now drafts from prompts, previews assumptions/warnings/unsupported items, compiles drafts, and loads compiled configs into existing workflow forms.
@@ -30,7 +31,7 @@ The latest research-workstation batch added:
 - Measure a pre-optimization benchmark baseline and update `docs/benchmark_results.md`.
 - Revisit AI Builder provider quality if OpenRouter free-model rate limits or availability become noisy during demos.
 - Improve AI Builder DSL prompting with more few-shot examples for rule-based drafts.
-- Evaluate stronger structured-output support for providers/models that can enforce JSON schema directly.
+- Add model-specific tests or notes for LangChain-backed providers if a demo model requires provider-specific structured-output tuning.
 - Add model-specific tuning notes for OpenRouter free models and any paid models used in demos.
 
 ## Later

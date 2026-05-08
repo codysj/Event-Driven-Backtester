@@ -17,6 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ai-langchain = [
+    "langchain-openai>=0.3,<1",
+]
 dev = [
     "matplotlib",
     "mypy",

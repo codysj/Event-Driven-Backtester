@@ -8,6 +8,7 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import ModuleType
 from typing import Protocol, TypeAlias, cast
 
 import httpx
@@ -113,6 +114,24 @@ class HttpChatClient(Protocol):
         json: Mapping[str, object],
     ) -> httpx.Response:
         """POST a chat completion request."""
+
+
+class LangChainStructuredChatModel(Protocol):
+    """Small subset of a LangChain structured-output runnable."""
+
+    def invoke(self, input: object) -> object:
+        """Invoke the structured model."""
+
+
+class LangChainChatModel(Protocol):
+    """Small subset of LangChain chat models used by the adapter."""
+
+    def with_structured_output(
+        self,
+        schema: type[StrategyDraft],
+        **kwargs: object,
+    ) -> LangChainStructuredChatModel:
+        """Return a structured-output runnable for the given schema."""
 
 
 class FakeStrategyDraftProvider:
@@ -478,6 +497,76 @@ class OpenAICompatibleStrategyDraftProvider:
             return client.post(url, headers=headers, json=payload)
 
 
+class LangChainOpenAICompatibleStrategyDraftProvider:
+    """Strategy-draft provider using LangChain structured output."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        base_url: str = DEFAULT_OPENAI_COMPATIBLE_BASE_URL,
+        timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+        chat_model: LangChainChatModel | None = None,
+    ) -> None:
+        if not api_key.strip():
+            raise ProviderConfigurationError("BACKTESTER_AI_API_KEY is required for LangChain AI providers.")
+        if not model.strip():
+            raise ProviderConfigurationError("BACKTESTER_AI_MODEL is required for LangChain AI providers.")
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.chat_model = chat_model or self._build_chat_model()
+
+    def draft_strategy(self, request: StrategyDraftRequest) -> ProviderDraft:
+        """Request a structured draft through LangChain and return inert data."""
+        logger.info(
+            "AI provider outbound request starting: provider=langchain_openai_compatible model=%s base_url=%s provider_class=%s api_key_configured=%s response_format_enabled=%s",
+            self.model,
+            self.base_url,
+            type(self).__name__,
+            "yes",
+            "yes",
+        )
+        try:
+            structured_model = self.chat_model.with_structured_output(StrategyDraft)
+            output = structured_model.invoke(
+                [
+                    {"role": "system", "content": STRATEGY_DRAFT_SYSTEM_PROMPT},
+                    {"role": "user", "content": request.prompt},
+                ]
+            )
+        except TimeoutError as exc:
+            raise ProviderTimeoutError("AI provider timed out while drafting the strategy.") from exc
+        except Exception as exc:
+            raise ProviderRequestError("AI provider request failed.") from exc
+
+        if isinstance(output, StrategyDraft):
+            return output
+        if isinstance(output, Mapping):
+            return cast(Mapping[str, object], output)
+        raise ProviderRequestError("AI provider returned an unexpected structured-output shape.")
+
+    def _build_chat_model(self) -> LangChainChatModel:
+        module = _load_langchain_openai_module()
+        chat_openai = getattr(module, "ChatOpenAI", None)
+        if chat_openai is None:
+            raise ProviderConfigurationError(
+                "LangChain provider dependencies are installed but ChatOpenAI is unavailable."
+            )
+        return cast(
+            LangChainChatModel,
+            chat_openai(
+                api_key=self.api_key,
+                model=self.model,
+                base_url=self.base_url,
+                timeout=self.timeout_seconds,
+                temperature=0,
+            ),
+        )
+
+
 def get_strategy_draft_provider(
     env: Mapping[str, str] | None = None,
     *,
@@ -528,9 +617,13 @@ def get_strategy_draft_provider(
         )
         _log_provider_selection(_provider_diagnostics(compatible_provider))
         return compatible_provider
+    if provider_name == "langchain_openai_compatible":
+        langchain_provider = _langchain_openai_compatible_provider(config)
+        _log_provider_selection(_provider_diagnostics(langchain_provider))
+        return langchain_provider
 
     raise ProviderConfigurationError(
-        "Unsupported BACKTESTER_AI_PROVIDER. Use fake, deepseek, openrouter, or openai_compatible."
+        "Unsupported BACKTESTER_AI_PROVIDER. Use fake, deepseek, openrouter, openai_compatible, or langchain_openai_compatible."
     )
 
 
@@ -671,11 +764,36 @@ def _openai_compatible_provider(
     )
 
 
+def _langchain_openai_compatible_provider(
+    config: StrategyDraftProviderConfig,
+) -> LangChainOpenAICompatibleStrategyDraftProvider:
+    if config.api_key is None:
+        raise ProviderConfigurationError(
+            "BACKTESTER_AI_API_KEY is required when BACKTESTER_AI_PROVIDER=langchain_openai_compatible."
+        )
+    return LangChainOpenAICompatibleStrategyDraftProvider(
+        api_key=config.api_key,
+        model=config.model or DEFAULT_OPENAI_COMPATIBLE_MODEL,
+        base_url=config.base_url or DEFAULT_OPENAI_COMPATIBLE_BASE_URL,
+        timeout_seconds=config.timeout_seconds,
+    )
+
+
 def _openrouter_headers(config: StrategyDraftProviderConfig) -> dict[str, str]:
     headers = {"X-OpenRouter-Title": config.app_name or DEFAULT_OPENROUTER_APP_NAME}
     if config.app_url is not None:
         headers["HTTP-Referer"] = config.app_url
     return headers
+
+
+def _load_langchain_openai_module() -> ModuleType:
+    try:
+        import langchain_openai
+    except ImportError as exc:
+        raise ProviderConfigurationError(
+            "LangChain provider dependencies are not installed. Install the backtester ai-langchain extra before selecting BACKTESTER_AI_PROVIDER=langchain_openai_compatible."
+        ) from exc
+    return cast(ModuleType, langchain_openai)
 
 
 def _parse_bool_env(raw: str | None, *, default: bool, name: str) -> bool:
@@ -969,6 +1087,15 @@ def _provider_diagnostics(provider: LLMProvider) -> ProviderDiagnostics:
             provider_class=type(provider).__name__,
             api_key_configured=bool(provider.api_key),
             response_format_enabled=provider.use_response_format,
+        )
+    if isinstance(provider, LangChainOpenAICompatibleStrategyDraftProvider):
+        return ProviderDiagnostics(
+            provider_name="langchain_openai_compatible",
+            model=provider.model,
+            base_url=provider.base_url,
+            provider_class=type(provider).__name__,
+            api_key_configured=bool(provider.api_key),
+            response_format_enabled=True,
         )
     if isinstance(provider, FakeStrategyDraftProvider):
         return ProviderDiagnostics(

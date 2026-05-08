@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from backtester.ai import (
     DraftCompileError,
     FakeStrategyDraftProvider,
+    LangChainOpenAICompatibleStrategyDraftProvider,
     OpenAICompatibleStrategyDraftProvider,
     ProviderConfigurationError,
     ProviderRequestError,
@@ -345,6 +346,94 @@ def test_provider_factory_selects_real_provider_from_env() -> None:
     assert provider.timeout_seconds == 3
 
 
+def test_provider_factory_selects_langchain_provider_from_env(monkeypatch) -> None:
+    class FakeChatOpenAI:
+        def __init__(
+            self,
+            *,
+            api_key: str,
+            model: str,
+            base_url: str,
+            timeout: float,
+            temperature: int,
+        ) -> None:
+            self.api_key = api_key
+            self.model = model
+            self.base_url = base_url
+            self.timeout = timeout
+            self.temperature = temperature
+
+        def with_structured_output(
+            self,
+            schema: type[StrategyDraft],
+            **kwargs: object,
+        ) -> "FakeChatOpenAI":
+            del schema, kwargs
+            return self
+
+        def invoke(self, input: object) -> StrategyDraft:
+            del input
+            return StrategyDraft(
+                target_mode=TargetMode.SINGLE_RUN,
+                ticker="AAPL",
+                strategy_kind=StrategyKind.MOMENTUM,
+                parameters={"fast_window": 20, "slow_window": 100},
+                status=StrategyDraftStatus.READY,
+            )
+
+    class FakeLangChainModule:
+        ChatOpenAI = FakeChatOpenAI
+
+    monkeypatch.setattr("backtester.ai.providers._load_langchain_openai_module", lambda: FakeLangChainModule())
+
+    provider = get_strategy_draft_provider(
+        {
+            "BACKTESTER_AI_ENABLED": "true",
+            "BACKTESTER_AI_PROVIDER": "langchain_openai_compatible",
+            "BACKTESTER_AI_API_KEY": "sk-test-secret",
+            "BACKTESTER_AI_MODEL": "test-model",
+            "BACKTESTER_AI_BASE_URL": "https://llm.example.test/v1",
+            "BACKTESTER_AI_TIMEOUT_SECONDS": "3",
+        },
+        prefer_fake_in_tests=False,
+    )
+
+    assert isinstance(provider, LangChainOpenAICompatibleStrategyDraftProvider)
+    assert provider.model == "test-model"
+    assert provider.base_url == "https://llm.example.test/v1"
+    assert provider.timeout_seconds == 3
+
+
+def test_provider_factory_langchain_missing_dependency_is_clear(monkeypatch) -> None:
+    def raise_missing_dependency() -> None:
+        raise ProviderConfigurationError(
+            "LangChain provider dependencies are not installed. Install the backtester ai-langchain extra before selecting BACKTESTER_AI_PROVIDER=langchain_openai_compatible."
+        )
+
+    monkeypatch.setattr("backtester.ai.providers._load_langchain_openai_module", raise_missing_dependency)
+
+    with pytest.raises(ProviderConfigurationError, match="LangChain provider dependencies are not installed"):
+        get_strategy_draft_provider(
+            {
+                "BACKTESTER_AI_ENABLED": "true",
+                "BACKTESTER_AI_PROVIDER": "langchain_openai_compatible",
+                "BACKTESTER_AI_API_KEY": "sk-test-secret",
+            },
+            prefer_fake_in_tests=False,
+        )
+
+
+def test_provider_factory_langchain_missing_api_key_is_clear() -> None:
+    with pytest.raises(ProviderConfigurationError, match="BACKTESTER_AI_API_KEY"):
+        get_strategy_draft_provider(
+            {
+                "BACKTESTER_AI_ENABLED": "true",
+                "BACKTESTER_AI_PROVIDER": "langchain_openai_compatible",
+            },
+            prefer_fake_in_tests=False,
+        )
+
+
 def test_provider_factory_selects_openrouter_with_safe_defaults() -> None:
     provider = get_strategy_draft_provider(
         {
@@ -494,6 +583,69 @@ def openrouter_provider(
         },
         use_response_format=use_response_format,
     )
+
+
+class StaticLangChainStructuredModel:
+    def __init__(self, output: object) -> None:
+        self.output = output
+        self.inputs: list[object] = []
+
+    def invoke(self, input: object) -> object:
+        self.inputs.append(input)
+        return self.output
+
+
+class StaticLangChainChatModel:
+    def __init__(self, output: object) -> None:
+        self.structured_model = StaticLangChainStructuredModel(output)
+        self.schemas: list[type[StrategyDraft]] = []
+
+    def with_structured_output(
+        self,
+        schema: type[StrategyDraft],
+        **kwargs: object,
+    ) -> StaticLangChainStructuredModel:
+        del kwargs
+        self.schemas.append(schema)
+        return self.structured_model
+
+
+def langchain_provider(chat_model: StaticLangChainChatModel) -> LangChainOpenAICompatibleStrategyDraftProvider:
+    return LangChainOpenAICompatibleStrategyDraftProvider(
+        api_key="sk-test-secret",
+        model="test-model",
+        base_url="https://llm.example.test/v1",
+        timeout_seconds=1,
+        chat_model=chat_model,
+    )
+
+
+def test_langchain_provider_uses_structured_output_and_validates_draft() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "strategy_kind": "momentum",
+        "parameters": {"fast_window": 20, "slow_window": 100},
+        "status": "ready",
+    }
+    chat_model = StaticLangChainChatModel(draft_json)
+
+    response = draft_strategy_from_request(
+        request("Run AAPL using a 20/100 SMA crossover."),
+        langchain_provider(chat_model),
+    )
+
+    assert response.status == StrategyDraftStatus.READY
+    assert response.draft is not None
+    assert response.draft.ticker == "AAPL"
+    assert chat_model.schemas == [StrategyDraft]
+    assert chat_model.structured_model.inputs
+    messages = chat_model.structured_model.inputs[0]
+    assert isinstance(messages, list)
+    assert messages[0]["role"] == "system"
+    assert "Never generate executable code" in messages[0]["content"]
 
 
 def test_real_provider_sends_system_prompt_and_validates_json() -> None:

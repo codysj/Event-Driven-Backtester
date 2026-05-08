@@ -9,6 +9,7 @@ from backtester.ai.compiler import (
 )
 from backtester.ai.providers import (
     FakeStrategyDraftProvider,
+    LangChainOpenAICompatibleStrategyDraftProvider,
     LLMProvider,
     OpenAICompatibleStrategyDraftProvider,
     ProviderConfigurationError,
@@ -32,6 +33,7 @@ from backtester.ai.validator import validate_strategy_draft, validate_strategy_d
 __all__ = [
     "DraftCompileError",
     "FakeStrategyDraftProvider",
+    "LangChainOpenAICompatibleStrategyDraftProvider",
     "LLMProvider",
     "OpenAICompatibleStrategyDraftProvider",
     "ProviderConfigurationError",

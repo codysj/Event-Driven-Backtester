@@ -1,6 +1,6 @@
 # Current State
 
-Last documentation pass: 2026-05-07.
+Last documentation pass: 2026-05-08.
 
 ## Implemented Functionality
 
@@ -69,8 +69,9 @@ Last documentation pass: 2026-05-07.
 - AI Strategy Builder backend foundation:
   - `backtester/ai/` package with strict Pydantic draft schemas.
   - Prompt template that requires JSON-only output, forbids executable code, forbids extra fields, and documents the exact rule-based DSL shape expected from real providers.
-  - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, optional OpenAI-compatible provider implementation, and first-class OpenRouter selection through `BACKTESTER_AI_PROVIDER=openrouter`.
+  - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, optional OpenAI-compatible provider implementation, first-class OpenRouter selection through `BACKTESTER_AI_PROVIDER=openrouter`, and optional LangChain OpenAI-compatible selection through `BACKTESTER_AI_PROVIDER=langchain_openai_compatible`.
   - OpenRouter defaults to `https://openrouter.ai/api/v1`, `POST /chat/completions`, and model `tencent/hy3-preview:free`, with optional backend attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` can disable the OpenAI-style `response_format` request field while keeping JSON parsing and strict draft validation.
+  - LangChain provider support is optional through `langchain-openai`, available via `python -m pip install ".[ai-langchain]"` or `python -m pip install -r requirements-ai-langchain.txt`. It uses `ChatOpenAI.with_structured_output(StrategyDraft)` and reuses backend-only AI model, API key, base URL, and timeout env vars. Missing LangChain imports fail as sanitized backend configuration errors only when the LangChain provider is selected.
   - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, timeout, app name, and app URL. No API key is exposed to the frontend.
   - Repo-root `.env.example` is committed as a placeholder-only OpenRouter template. FastAPI auto-loads a private repo-root `.env` on startup through `python-dotenv` without overriding already-set system environment variables. Local `.env` and `.env.*` files are gitignored, while `.env.example` remains tracked.
   - A limited provider-output normalization layer repairs only deterministic schema-adjacent mistakes before Pydantic validation: simple `benchmark` boolean strings, clearly structured `equity_sizing` objects, and clean `rule_spec.conditions` references that can be converted into the internal `rule_spec.rules` DSL.
@@ -103,7 +104,7 @@ Last documentation pass: 2026-05-07.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- AI Strategy Builder can optionally call OpenRouter or another real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1, and rule-based drafts must conform to the internal `rule_spec.rules` DSL. OpenRouter free models may be rate-limited, temporarily unavailable, lower quality than paid models, or prone to imperfect JSON/schema output; only limited deterministic normalization is applied before strict validation rejects the rest.
+- AI Strategy Builder can optionally call OpenRouter, another real OpenAI-compatible provider, or the optional LangChain OpenAI-compatible adapter when backend env vars and dependencies are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1, and rule-based drafts must conform to the internal `rule_spec.rules` DSL. OpenRouter free models may be rate-limited, temporarily unavailable, lower quality than paid models, or prone to imperfect JSON/schema output; only limited deterministic normalization is applied before strict validation rejects the rest.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.
@@ -151,6 +152,8 @@ cd frontend && npm run build
 
 Recent documented results:
 
+- `.\.venv\Scripts\python.exe -m pytest`: success after adding the optional LangChain provider path. 191 passed.
+- `.\.venv\Scripts\python.exe -m mypy backtester`: success after adding the optional LangChain provider path. No issues found in 38 source files.
 - `python -m pytest`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `python -m mypy backtester`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `cmd /c npm run lint` from `frontend/`: success after adding the AI Builder UI.

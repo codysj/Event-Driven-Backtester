@@ -44,6 +44,7 @@ DEFAULT_AI_MODELS = {
     "openrouter": DEFAULT_OPENROUTER_MODEL,
     "deepseek": "deepseek-chat",
     "openai_compatible": "gpt-4o-mini",
+    "langchain_openai_compatible": "gpt-4o-mini",
 }
 
 

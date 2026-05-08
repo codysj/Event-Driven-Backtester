@@ -15,7 +15,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `backtester/data/`
   - Fetches OHLCV data with yfinance, cleans it, validates schema, and caches Parquet files under `~/.backtester/cache/`.
 - `backtester/ai/`
-  - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, limited provider-output normalization, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
+  - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, optional LangChain OpenAI-compatible adapter, limited provider-output normalization, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
 - `backtester/strategy/`
   - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, constrained rule DSL schemas, `RuleBasedStrategy`, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
@@ -280,12 +280,13 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - FastAPI serves the local API.
 - The Next.js frontend calls `NEXT_PUBLIC_API_URL`, defaulting to `http://localhost:8000`.
 - No database, auth provider, broker API, payment system, paid data feed, or live trading integration is present.
-- The AI Strategy Builder uses a deterministic fake provider by default. Optional real provider support uses server-side OpenAI-compatible chat completion calls only when `BACKTESTER_AI_PROVIDER` and server-side credentials are configured.
+- The AI Strategy Builder uses a deterministic fake provider by default. Optional real provider support uses server-side OpenAI-compatible chat completion calls or a LangChain structured-output adapter only when `BACKTESTER_AI_PROVIDER` and server-side credentials are configured.
 - OpenRouter is supported as a first-class backend AI provider with `BACKTESTER_AI_PROVIDER=openrouter`. It calls `POST https://openrouter.ai/api/v1/chat/completions` by default, uses bearer auth from `BACKTESTER_AI_API_KEY`, defaults to `tencent/hy3-preview:free`, and can send backend-only attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`.
+- LangChain is supported as an optional backend provider with `BACKTESTER_AI_PROVIDER=langchain_openai_compatible`. It reuses `BACKTESTER_AI_MODEL`, `BACKTESTER_AI_API_KEY`, `BACKTESTER_AI_BASE_URL`, and `BACKTESTER_AI_TIMEOUT_SECONDS`, requires the optional `langchain-openai` dependency, invokes `ChatOpenAI.with_structured_output(StrategyDraft)`, and still returns through the existing normalization and validation boundary.
 
 ## Configuration And Environment
 
-- Python dependencies are in `requirements.txt` and `pyproject.toml`.
+- Python dependencies are in `requirements.txt` and `pyproject.toml`; optional LangChain provider dependencies are in the `ai-langchain` extra and `requirements-ai-langchain.txt`.
 - Tests are configured in `pyproject.toml` with `testpaths = ["tests"]`.
 - Mypy is configured strict for Python 3.11 in `pyproject.toml`.
 - Frontend dependencies and scripts are in `frontend/package.json`.
@@ -296,7 +297,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Additional API CORS origins can be configured with comma-separated `BACKTESTER_CORS_ORIGINS`.
 - AI Builder backend env vars:
   - `BACKTESTER_AI_ENABLED=true|false`
-  - `BACKTESTER_AI_PROVIDER=fake|deepseek|openrouter|openai_compatible`
+  - `BACKTESTER_AI_PROVIDER=fake|deepseek|openrouter|openai_compatible|langchain_openai_compatible`
   - `BACKTESTER_AI_MODEL`
   - `BACKTESTER_AI_API_KEY`
   - `BACKTESTER_AI_BASE_URL`
