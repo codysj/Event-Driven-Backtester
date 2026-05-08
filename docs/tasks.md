@@ -29,6 +29,9 @@ The latest research-workstation batch added:
 - Add a local Python interpreter/venv setup note or script for Windows workspaces where `python` is not on PATH.
 - Measure a pre-optimization benchmark baseline and update `docs/benchmark_results.md`.
 - Revisit AI Builder provider quality if OpenRouter free-model rate limits or availability become noisy during demos.
+- Improve AI Builder DSL prompting with more few-shot examples for rule-based drafts.
+- Evaluate stronger structured-output support for providers/models that can enforce JSON schema directly.
+- Add model-specific tuning notes for OpenRouter free models and any paid models used in demos.
 
 ## Later
 

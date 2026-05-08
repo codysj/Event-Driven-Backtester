@@ -127,6 +127,19 @@ def test_monthly_returns_table() -> None:
     assert list(table["return"]) == pytest.approx([0.1, 0.1])
 
 
+def test_monthly_returns_converts_datetime_like_index() -> None:
+    equity = pd.Series(
+        [100.0, 110.0, 121.0],
+        index=pd.Index(["2020-01-31", "2020-02-28", "2020-03-31"]),
+    )
+
+    table = monthly_returns(equity)
+
+    assert list(table["year"]) == [2020, 2020]
+    assert list(table["month"]) == [2, 3]
+    assert list(table["return"]) == pytest.approx([0.1, 0.1])
+
+
 def test_win_rate() -> None:
     trades = [
         trade(Side.BUY, 10, 100.0),

@@ -69,7 +69,7 @@ class StrategyDraft(BaseModel):
     ticker: str | None = None
     start_date: str | None = None
     end_date: str | None = None
-    benchmark: bool = True
+    benchmark: bool = Field(default=True, strict=True)
     initial_cash: float | None = Field(default=100_000.0, gt=0)
     commission_rate: float | None = Field(default=0.001, ge=0)
     slippage_bps: float | None = Field(default=5.0, ge=0)

@@ -209,9 +209,19 @@ By default, the API allows browser requests from `http://localhost:3000` and `ht
 BACKTESTER_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
+### Backend Environment Variables
+
+For local backend configuration, copy the committed template to a private repo-root `.env` file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+The FastAPI backend automatically loads `.env` on startup. Restart `python -m uvicorn backtester.api.main:app --reload` after changing backend environment variables so the process sees the updated values. The `.env` file is gitignored and must never be committed. Keep API keys backend-only: do not put `BACKTESTER_AI_API_KEY` or any other backend AI secret in `frontend/.env.local`, and never prefix backend secrets with `NEXT_PUBLIC_`.
+
 ### AI Builder Provider Configuration
 
-AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into OpenRouter, create an OpenRouter account, generate an API key from [OpenRouter Keys](https://openrouter.ai/settings/keys), and configure these variables in the backend/server environment before starting FastAPI. Do not put these values in `frontend/.env.local`.
+AI Builder is safe-by-default: without backend AI environment variables it uses the deterministic fake provider, which is also the provider used by tests. To opt into OpenRouter, create an OpenRouter account, generate an API key from [OpenRouter Keys](https://openrouter.ai/settings/keys), and configure these variables in the backend `.env` file before starting FastAPI. Do not put these values in `frontend/.env.local`.
 
 For local setup, copy the committed backend template to a private env file and replace the placeholder API key:
 
@@ -228,13 +238,14 @@ BACKTESTER_AI_MODEL=tencent/hy3-preview:free
 BACKTESTER_AI_API_KEY=your_openrouter_api_key_here
 BACKTESTER_AI_BASE_URL=https://openrouter.ai/api/v1
 BACKTESTER_AI_TIMEOUT_SECONDS=30
+BACKTESTER_AI_USE_RESPONSE_FORMAT=true
 BACKTESTER_AI_APP_NAME=Backtest Lab
 BACKTESTER_AI_APP_URL=http://localhost:3000
 ```
 
-Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, and `openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
+Supported `BACKTESTER_AI_PROVIDER` values are `fake`, `deepseek`, `openrouter`, and `openai_compatible`. For OpenRouter, the default base URL is `https://openrouter.ai/api/v1`, the API call is `POST /chat/completions`, and the default model is `tencent/hy3-preview:free`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` disables the OpenAI-style `response_format` request field for providers or free models that reject it; the backend still requires JSON-only responses, strict Pydantic validation, raw-code rejection, and inert compile-only output. `BACKTESTER_AI_APP_NAME` becomes the OpenRouter attribution title header, defaulting to `Backtest Lab`; `BACKTESTER_AI_APP_URL` is optional and becomes the `HTTP-Referer` attribution header.
 
-On PowerShell, set the backend env vars in the same terminal that starts FastAPI:
+If you prefer not to use `.env`, you can still set the backend env vars manually in the same terminal that starts FastAPI:
 
 ```powershell
 $env:BACKTESTER_AI_ENABLED="true"
@@ -243,6 +254,7 @@ $env:BACKTESTER_AI_MODEL="tencent/hy3-preview:free"
 $env:BACKTESTER_AI_API_KEY="your_openrouter_api_key_here"
 $env:BACKTESTER_AI_BASE_URL="https://openrouter.ai/api/v1"
 $env:BACKTESTER_AI_TIMEOUT_SECONDS="30"
+$env:BACKTESTER_AI_USE_RESPONSE_FORMAT="true"
 $env:BACKTESTER_AI_APP_NAME="Backtest Lab"
 $env:BACKTESTER_AI_APP_URL="http://localhost:3000"
 python -m uvicorn backtester.api.main:app --reload
@@ -260,6 +272,14 @@ Open `http://localhost:3000`, switch to AI Builder, and test with a prompt such 
 API keys stay on the FastAPI server and are never sent to the browser. Never commit real keys, never paste them into `frontend/.env.local`, and never prefix them with `NEXT_PUBLIC_`. OpenRouter free models may be rate-limited, temporarily unavailable, or lower quality than paid models.
 
 AI outputs are treated as untrusted. The API parses JSON only, rejects raw code-looking responses and unexpected fields, validates drafts with Pydantic plus `backtester/ai/validator.py`, and compiles only into existing request schemas. Rule-based drafts use a strict DSL with supported indicators (`close`, `sma`, `rolling_high`, `rolling_low`, `bollinger_upper`, `bollinger_lower`) and operators (`>`, `<`, `>=`, `<=`, `crosses_above`, `crosses_below`). It never executes generated code, never places trades, and does not provide investment advice.
+
+### AI Strategy Builder Output Requirements
+
+Real AI providers must return JSON only, with no markdown or explanatory text outside the JSON object. Drafts are validated against the strict `StrategyDraft` schema with `extra="forbid"`: unsupported fields such as `equity_sizing`, arbitrary formulas, generated code, alternate rule formats, and unknown indicators/operators are rejected.
+
+The backend includes a small safe normalization pass before validation for common free-model formatting mistakes. It can convert unambiguous `benchmark` strings (`"yes"`, `"true"`, `"no"`, `"false"`) into booleans, map clearly structured `equity_sizing` objects into `position_size_method` plus `position_size_value`, and convert a narrow `rule_spec.conditions` shape into the internal `rule_spec.rules` DSL only when every referenced indicator and condition validates. Ambiguous or unsupported structures are left unchanged and fail validation.
+
+Free LLMs may produce imperfect JSON or schema-adjacent fields. The system corrects only simple deterministic cases, keeps JSON-only parsing and raw-code rejection, and preserves the strict validation boundary before any compile handoff.
 
 ## Local API + Frontend Workflow
 

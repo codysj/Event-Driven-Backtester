@@ -14,7 +14,14 @@ from backtester.ai.schemas import (
     TargetMode,
 )
 from backtester.ai.validator import validate_strategy_draft
-from backtester.api.schemas import BacktestRequest, GridSearchRequest, OptimizationMetric, StrategyId, WalkForwardRequest
+from backtester.api.schemas import (
+    BacktestRequest,
+    GridSearchRequest,
+    OptimizationMetric,
+    ResearchStrategyId,
+    StrategyId,
+    WalkForwardRequest,
+)
 from backtester.engine import PositionSizeMethod
 
 
@@ -116,7 +123,7 @@ def compile_grid_search_request(draft: StrategyDraft) -> GridSearchRequest:
     try:
         return GridSearchRequest(
             **_base_payload(draft),
-            strategy=_strategy_id(draft.strategy_kind),
+            strategy=_research_strategy_id(draft.strategy_kind),
             parameter_grid=_parameter_grid_for_research(draft),
             optimization_metric=draft.optimization_metric or DEFAULT_OPTIMIZATION_METRIC,
             max_results=DEFAULT_MAX_RESULTS,
@@ -131,7 +138,7 @@ def compile_walk_forward_request(draft: StrategyDraft) -> WalkForwardRequest:
     try:
         return WalkForwardRequest(
             **_base_payload(draft),
-            strategy=_strategy_id(draft.strategy_kind),
+            strategy=_research_strategy_id(draft.strategy_kind),
             parameter_grid=_parameter_grid_for_research(draft),
             optimization_metric=draft.optimization_metric or DEFAULT_OPTIMIZATION_METRIC,
             train_window_bars=draft.train_window_bars or DEFAULT_TRAIN_WINDOW_BARS,
@@ -188,6 +195,16 @@ def _strategy_id(strategy_kind: StrategyKind) -> StrategyId:
         return "mean_reversion"
     if strategy_kind == StrategyKind.RULE_BASED:
         return "rule_based"
+    raise DraftCompileError(f"Unsupported strategy kind: {strategy_kind.value}.")
+
+
+def _research_strategy_id(strategy_kind: StrategyKind) -> ResearchStrategyId:
+    if strategy_kind == StrategyKind.MOMENTUM:
+        return "momentum"
+    if strategy_kind == StrategyKind.MEAN_REVERSION:
+        return "mean_reversion"
+    if strategy_kind == StrategyKind.RULE_BASED:
+        raise DraftCompileError("rule_based drafts can only compile to single_run in v1.")
     raise DraftCompileError(f"Unsupported strategy kind: {strategy_kind.value}.")
 
 

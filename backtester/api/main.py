@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv()
 
 from backtester.ai import compile_strategy_draft, draft_strategy_from_request
 from backtester.ai.schemas import (
@@ -32,7 +36,15 @@ from backtester.api.services import (
 )
 
 
+logger = logging.getLogger("uvicorn.error")
 DEFAULT_CORS_ORIGINS = ("http://localhost:3000", "http://127.0.0.1:3000")
+DEFAULT_AI_PROVIDER = "fake"
+DEFAULT_OPENROUTER_MODEL = "tencent/hy3-preview:free"
+DEFAULT_AI_MODELS = {
+    "openrouter": DEFAULT_OPENROUTER_MODEL,
+    "deepseek": "deepseek-chat",
+    "openai_compatible": "gpt-4o-mini",
+}
 
 
 def get_cors_origins(raw_origins: str | None = None) -> list[str]:
@@ -54,6 +66,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def log_backend_configuration() -> None:
+    """Log non-sensitive backend configuration useful for local startup checks."""
+    provider = _selected_ai_provider()
+    logger.info("AI provider selected: %s", provider)
+    logger.info("AI model: %s", _selected_ai_model(provider))
+
+
+app.router.add_event_handler("startup", log_backend_configuration)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -114,3 +136,17 @@ def run_walk_forward(request: WalkForwardRequest) -> WalkForwardResponse:
     except Exception as exc:
         detail = f"Could not run walk-forward validation for {request.ticker} between {request.start_date} and {request.end_date}."
         raise HTTPException(status_code=500, detail=detail) from exc
+
+
+def _selected_ai_provider() -> str:
+    configured = os.getenv("BACKTESTER_AI_PROVIDER")
+    if configured is None or configured.strip() == "":
+        return DEFAULT_AI_PROVIDER
+    return configured.strip().lower()
+
+
+def _selected_ai_model(provider: str) -> str:
+    configured = os.getenv("BACKTESTER_AI_MODEL")
+    if configured is not None and configured.strip():
+        return configured.strip()
+    return DEFAULT_AI_MODELS.get(provider, "default")

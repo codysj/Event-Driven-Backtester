@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import product
 
@@ -30,7 +30,7 @@ class GridSearchResult:
 def run_grid_search(
     loader: DataLoader,
     strategy_factory: Callable[..., Strategy],
-    param_grid: dict[str, Sequence[object]],
+    param_grid: Mapping[str, Sequence[object]],
     config: BacktestConfig,
     risk_free_rate: float = 0.0,
     sort_by: str = "sharpe_ratio",
@@ -90,7 +90,7 @@ def run_grid_search(
     return result_frame.reset_index(drop=True)
 
 
-def _expand_grid(param_grid: dict[str, Sequence[object]]) -> list[dict[str, object]]:
+def _expand_grid(param_grid: Mapping[str, Sequence[object]]) -> list[dict[str, object]]:
     keys = list(param_grid)
     values = [param_grid[key] for key in keys]
     return [dict(zip(keys, combination, strict=True)) for combination in product(*values)]

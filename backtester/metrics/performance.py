@@ -147,12 +147,15 @@ def monthly_returns(equity_curve: pd.Series) -> pd.DataFrame:
     """Return calendar monthly returns with year, month, and return columns."""
     if len(equity_curve) < 2:
         return pd.DataFrame(columns=["year", "month", "return"])
-    monthly_equity = equity_curve.resample("ME").last()
+    datetime_index = pd.DatetimeIndex(equity_curve.index)
+    dated_equity = pd.Series(equity_curve.to_numpy(dtype=float), index=datetime_index)
+    monthly_equity = dated_equity.resample("ME").last()
     monthly = monthly_equity.pct_change().dropna()
+    monthly_index = pd.DatetimeIndex(monthly.index)
     return pd.DataFrame(
         {
-            "year": monthly.index.year.astype(int),
-            "month": monthly.index.month.astype(int),
+            "year": monthly_index.year.astype(int),
+            "month": monthly_index.month.astype(int),
             "return": monthly.to_numpy(dtype=float),
         }
     )

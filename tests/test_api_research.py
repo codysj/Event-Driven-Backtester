@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 import math
 
 import pandas as pd
@@ -10,6 +11,8 @@ from fastapi.testclient import TestClient
 from backtester.api.main import app
 from backtester.api.schemas import GridSearchRequest, WalkForwardRequest
 from backtester.api.services import (
+    _cell_number,
+    _index_date,
     run_grid_search_from_request,
     run_walk_forward_from_request,
 )
@@ -178,3 +181,21 @@ def test_walk_forward_invalid_windows_rejected() -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_api_response_number_conversion_preserves_ints_and_floats() -> None:
+    assert _cell_number(2.0) == 2
+    assert _cell_number(2.5) == 2.5
+
+
+def test_api_response_number_conversion_rejects_invalid_values() -> None:
+    with pytest.raises(TypeError, match="heatmap parameter value must be numeric"):
+        _cell_number("not numeric")
+
+
+def test_index_date_accepts_date_like_values_and_rejects_invalid_values() -> None:
+    assert _index_date(date(2020, 1, 2)) == "2020-01-02"
+    assert _index_date("2020-01-03") == "2020-01-03"
+    assert _index_date(pd.Timestamp("2020-01-04")) == "2020-01-04"
+    with pytest.raises(TypeError, match="Index values must be date-like"):
+        _index_date(object())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -104,6 +105,8 @@ def test_malformed_provider_output_is_rejected_cleanly() -> None:
     assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
     assert response.draft is None
     assert response.validation_errors
+    assert "Provider draft validation failed" in response.validation_errors[0]
+    assert "fields=parameters" in response.validation_errors[0]
     assert response.warnings == ["Provider returned an invalid strategy draft."]
 
 
@@ -357,6 +360,23 @@ def test_provider_factory_selects_openrouter_with_safe_defaults() -> None:
     assert provider.model == "tencent/hy3-preview:free"
     assert provider.base_url == "https://openrouter.ai/api/v1"
     assert provider.extra_headers == {"X-OpenRouter-Title": "Backtest Lab"}
+    assert provider.use_response_format is True
+
+
+def test_provider_factory_can_disable_response_format_for_openrouter() -> None:
+    provider = get_strategy_draft_provider(
+        {
+            "BACKTESTER_AI_ENABLED": "true",
+            "BACKTESTER_AI_PROVIDER": "openrouter",
+            "BACKTESTER_AI_API_KEY": "sk-test-secret",
+            "BACKTESTER_AI_USE_RESPONSE_FORMAT": "false",
+        },
+        prefer_fake_in_tests=False,
+    )
+
+    assert isinstance(provider, OpenAICompatibleStrategyDraftProvider)
+    assert provider.provider_name == "openrouter"
+    assert provider.use_response_format is False
 
 
 def test_provider_factory_openrouter_uses_app_attribution_env() -> None:
@@ -456,7 +476,11 @@ def real_provider(client: StaticChatClient) -> OpenAICompatibleStrategyDraftProv
     )
 
 
-def openrouter_provider(client: StaticChatClient) -> OpenAICompatibleStrategyDraftProvider:
+def openrouter_provider(
+    client: StaticChatClient,
+    *,
+    use_response_format: bool = True,
+) -> OpenAICompatibleStrategyDraftProvider:
     return OpenAICompatibleStrategyDraftProvider(
         api_key="sk-test-secret",
         model="tencent/hy3-preview:free",
@@ -468,6 +492,7 @@ def openrouter_provider(client: StaticChatClient) -> OpenAICompatibleStrategyDra
             "X-OpenRouter-Title": "Backtest Lab",
             "HTTP-Referer": "http://localhost:3000",
         },
+        use_response_format=use_response_format,
     )
 
 
@@ -496,9 +521,12 @@ def test_real_provider_sends_system_prompt_and_validates_json() -> None:
     assert isinstance(messages, list)
     assert messages[0]["role"] == "system"
     assert "Never generate executable code" in messages[0]["content"]
+    assert "Do not output equity_sizing" in messages[0]["content"]
+    assert "benchmark must be a JSON boolean" in messages[0]["content"]
 
 
-def test_openrouter_provider_posts_chat_completions_with_auth_model_and_attribution() -> None:
+def test_openrouter_provider_posts_chat_completions_with_auth_model_and_attribution(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.INFO, logger="uvicorn.error")
     draft_json = {
         "target_mode": "single_run",
         "ticker": "AAPL",
@@ -528,6 +556,38 @@ def test_openrouter_provider_posts_chat_completions_with_auth_model_and_attribut
     payload = captured["json"]
     assert isinstance(payload, dict)
     assert payload["model"] == "tencent/hy3-preview:free"
+    assert payload["response_format"] == {"type": "json_object"}
+    logs = caplog.text
+    assert "AI provider execution selected" in logs
+    assert "AI provider outbound request starting" in logs
+    assert "AI provider HTTP response" in logs
+    assert "status=200" in logs
+    assert "sk-test-secret" not in logs
+    assert "Bearer" not in logs
+
+
+def test_openrouter_provider_attempts_request_without_response_format() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "strategy_kind": "momentum",
+        "parameters": {"fast_window": 20, "slow_window": 100},
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(
+        request("Run AAPL using a 20/100 SMA crossover."),
+        openrouter_provider(http_client, use_response_format=False),
+    )
+
+    assert response.status == StrategyDraftStatus.READY
+    assert len(http_client.requests) == 1
+    payload = http_client.requests[0]["json"]
+    assert isinstance(payload, dict)
+    assert "response_format" not in payload
 
 
 def test_real_provider_timeout_is_handled_cleanly() -> None:
@@ -566,6 +626,192 @@ def test_real_provider_extra_code_field_is_rejected() -> None:
     assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
     assert response.draft is None
     assert response.validation_errors
+    assert "fields=code" in response.validation_errors[0]
+    assert "code: Extra inputs are not permitted" in response.validation_errors
+
+
+def test_provider_invalid_draft_diagnostics_are_sanitized(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level(logging.WARNING, logger="uvicorn.error")
+    secret = "sk-test-secret"
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "strategy_kind": "momentum",
+        "benchmark": "maybe",
+        "parameters": {"fast_window": "bad"},
+        "status": "ready",
+        "extra_field": "not allowed",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Run AAPL with momentum."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.draft is None
+    assert response.validation_errors[0].startswith(
+        "Provider draft validation failed for provider=openai_compatible model=test-model"
+    )
+    assert "fields=benchmark, extra_field, parameters" in response.validation_errors[0]
+    assert "benchmark: Input should be a valid boolean" in response.validation_errors
+    assert any("parameters.fast_window" in error for error in response.validation_errors)
+    assert "extra_field: Extra inputs are not permitted" in response.validation_errors
+    assert secret not in response.model_dump_json()
+    assert secret not in caplog.text
+    assert "Bearer" not in caplog.text
+
+
+def test_provider_normalizes_benchmark_strings_before_validation() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "strategy_kind": "momentum",
+        "benchmark": "yes",
+        "parameters": {"fast_window": 20, "slow_window": 100},
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Run AAPL with a 20/100 SMA crossover."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.READY
+    assert response.draft is not None
+    assert response.draft.benchmark is True
+
+
+def test_provider_normalizes_clear_equity_sizing_object() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "TSLA",
+        "start_date": "2020-01-01",
+        "end_date": "2023-12-31",
+        "strategy_kind": "momentum",
+        "equity_sizing": {"method": "percent_equity", "value": 25},
+        "parameters": {"fast_window": 7, "slow_window": 31},
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Run TSLA with a 7/31 SMA crossover."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.READY
+    assert response.draft is not None
+    assert response.draft.position_size_method is not None
+    assert response.draft.position_size_method.value == "PERCENT_EQUITY"
+    assert response.draft.position_size_value == 0.25
+
+
+def test_provider_rejects_ambiguous_equity_sizing_object() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "TSLA",
+        "strategy_kind": "momentum",
+        "equity_sizing": {"amount": "25%"},
+        "parameters": {"fast_window": 7, "slow_window": 31},
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Run TSLA with a 7/31 SMA crossover."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.draft is None
+    assert "fields=equity_sizing" in response.validation_errors[0]
+    assert "equity_sizing: Extra inputs are not permitted" in response.validation_errors
+
+
+def test_provider_normalizes_clean_rule_spec_conditions_shape() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "strategy_kind": "rule_based",
+        "rule_spec": {
+            "indicators": {
+                "fast": {"name": "sma", "window": 7},
+                "slow": {"name": "sma", "window": 31},
+            },
+            "conditions": {
+                "entry": [{"left": "fast", "operator": "crosses_above", "right": "slow"}],
+                "exit": [{"left": "fast", "operator": "crosses_below", "right": "slow"}],
+            },
+        },
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Create a rule-based SMA crossover for AAPL."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.READY
+    assert response.draft is not None
+    assert response.draft.rule_spec is not None
+    assert response.draft.rule_spec.rules.entry[0].operator == "crosses_above"
+
+
+def test_provider_rejects_malformed_rule_spec_conditions_shape() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "strategy_kind": "rule_based",
+        "rule_spec": {
+            "indicators": {"rsi": {"name": "rsi", "window": 14}},
+            "conditions": {"entry": [{"left": "rsi", "operator": ">", "right": {"name": "close"}}]},
+        },
+        "status": "ready",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Create a rule-based RSI strategy for AAPL."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.draft is None
+    assert "fields=rule_spec" in response.validation_errors[0]
+    assert any("rule_spec.rules" in error for error in response.validation_errors)
+    assert any("rule_spec.indicators" in error for error in response.validation_errors)
+    assert any("rule_spec.conditions" in error for error in response.validation_errors)
+
+
+def test_provider_rejects_extra_fields_after_normalization() -> None:
+    draft_json = {
+        "target_mode": "single_run",
+        "ticker": "AAPL",
+        "strategy_kind": "momentum",
+        "benchmark": "true",
+        "parameters": {"fast_window": 20, "slow_window": 100},
+        "status": "ready",
+        "surprise": "not allowed",
+    }
+    http_client = StaticChatClient(chat_response(json.dumps(draft_json)))
+
+    response = draft_strategy_from_request(request("Run AAPL with a 20/100 SMA crossover."), real_provider(http_client))
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.draft is None
+    assert "fields=surprise" in response.validation_errors[0]
+    assert "surprise: Extra inputs are not permitted" in response.validation_errors
+
+
+def test_fake_provider_returns_valid_strategy_draft_schema() -> None:
+    provider = FakeStrategyDraftProvider()
+    draft = provider.draft_strategy(request("Run AAPL from 2018 to 2024 using a 20/100 SMA crossover"))
+
+    validated = StrategyDraft.model_validate(draft.model_dump(mode="json"))
+
+    assert validated.strategy_kind == StrategyKind.MOMENTUM
+    assert validated.parameters == {"fast_window": 20, "slow_window": 100}
+
+
+def test_strategy_draft_rejects_extra_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        StrategyDraft.model_validate(
+            {
+                "ticker": "AAPL",
+                "strategy_kind": "momentum",
+                "parameters": {"fast_window": 20, "slow_window": 100},
+                "status": "ready",
+                "surprise": "not allowed",
+            }
+        )
 
 
 def test_real_provider_cannot_mark_live_trading_as_ready() -> None:
@@ -802,6 +1048,46 @@ def test_walk_forward_draft_compiles_into_walk_forward_request() -> None:
     assert compiled.train_window_bars == 252
     assert compiled.test_window_bars == 63
     assert compiled.step_bars == 63
+
+
+def test_rule_based_grid_search_draft_is_rejected() -> None:
+    draft_response = draft_strategy_from_request(
+        request(
+            "For AAPL from 2020 to 2023, buy when close crosses above "
+            "the 3 day SMA and sell when close crosses below it."
+        )
+    )
+
+    assert draft_response.draft is not None
+    draft = draft_response.draft.model_copy(update={"target_mode": TargetMode.GRID_SEARCH})
+    assert draft.strategy_kind == StrategyKind.RULE_BASED
+    response = compile_strategy_draft(draft)
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.payload is None
+    assert "rule_based drafts can only compile to single_run in v1." in response.validation_errors
+    with pytest.raises(DraftCompileError, match="rule_based drafts can only compile to single_run"):
+        compile_grid_search_request(draft)
+
+
+def test_rule_based_walk_forward_draft_is_rejected() -> None:
+    draft_response = draft_strategy_from_request(
+        request(
+            "For AAPL from 2020 to 2023, buy when close crosses above "
+            "the 3 day SMA and sell when close crosses below it."
+        )
+    )
+
+    assert draft_response.draft is not None
+    draft = draft_response.draft.model_copy(update={"target_mode": TargetMode.WALK_FORWARD})
+    assert draft.strategy_kind == StrategyKind.RULE_BASED
+    response = compile_strategy_draft(draft)
+
+    assert response.status == StrategyDraftStatus.NEEDS_CLARIFICATION
+    assert response.payload is None
+    assert "rule_based drafts can only compile to single_run in v1." in response.validation_errors
+    with pytest.raises(DraftCompileError, match="rule_based drafts can only compile to single_run"):
+        compile_walk_forward_request(draft)
 
 
 def test_compile_infers_deterministic_defaults_and_warnings() -> None:

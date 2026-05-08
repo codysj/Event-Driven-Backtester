@@ -68,11 +68,13 @@ Last documentation pass: 2026-05-07.
   - Configurable CORS origins through `BACKTESTER_CORS_ORIGINS`
 - AI Strategy Builder backend foundation:
   - `backtester/ai/` package with strict Pydantic draft schemas.
-  - Prompt template that requires structured JSON and forbids executable code.
+  - Prompt template that requires JSON-only output, forbids executable code, forbids extra fields, and documents the exact rule-based DSL shape expected from real providers.
   - `LLMProvider` protocol, provider factory, deterministic `FakeStrategyDraftProvider`, optional OpenAI-compatible provider implementation, and first-class OpenRouter selection through `BACKTESTER_AI_PROVIDER=openrouter`.
-  - OpenRouter defaults to `https://openrouter.ai/api/v1`, `POST /chat/completions`, and model `tencent/hy3-preview:free`, with optional backend attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`.
+  - OpenRouter defaults to `https://openrouter.ai/api/v1`, `POST /chat/completions`, and model `tencent/hy3-preview:free`, with optional backend attribution headers from `BACKTESTER_AI_APP_NAME` and `BACKTESTER_AI_APP_URL`. `BACKTESTER_AI_USE_RESPONSE_FORMAT=false` can disable the OpenAI-style `response_format` request field while keeping JSON parsing and strict draft validation.
   - Backend-only AI environment variables for `BACKTESTER_AI_ENABLED`, provider, model, API key, base URL, timeout, app name, and app URL. No API key is exposed to the frontend.
-  - Repo-root `.env.example` is committed as a placeholder-only OpenRouter template. Local `.env` and `.env.*` files are gitignored, while `.env.example` remains tracked.
+  - Repo-root `.env.example` is committed as a placeholder-only OpenRouter template. FastAPI auto-loads a private repo-root `.env` on startup through `python-dotenv` without overriding already-set system environment variables. Local `.env` and `.env.*` files are gitignored, while `.env.example` remains tracked.
+  - A limited provider-output normalization layer repairs only deterministic schema-adjacent mistakes before Pydantic validation: simple `benchmark` boolean strings, clearly structured `equity_sizing` objects, and clean `rule_spec.conditions` references that can be converted into the internal `rule_spec.rules` DSL.
+  - Ambiguous sizing, malformed rule specs, unsupported indicators/operators, arbitrary formulas, raw code, and extra provider fields remain rejected. Validation errors include sanitized provider/model context and failing fields without exposing API keys or raw payloads.
   - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
   - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads, including rule-based single-run payloads with `rule_spec`.
   - API endpoints return draft/compile status, warnings, unsupported items, and validation errors without executing workflows. Fake remains the default provider, including tests.
@@ -101,7 +103,7 @@ Last documentation pass: 2026-05-07.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- AI Strategy Builder can optionally call OpenRouter or another real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1. OpenRouter free models may be rate-limited, temporarily unavailable, or lower quality than paid models.
+- AI Strategy Builder can optionally call OpenRouter or another real OpenAI-compatible provider when backend env vars are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1, and rule-based drafts must conform to the internal `rule_spec.rules` DSL. OpenRouter free models may be rate-limited, temporarily unavailable, lower quality than paid models, or prone to imperfect JSON/schema output; only limited deterministic normalization is applied before strict validation rejects the rest.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
 - No live deployment config.

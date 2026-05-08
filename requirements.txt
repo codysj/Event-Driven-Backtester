@@ -5,6 +5,7 @@ numpy
 pandas
 pandas-stubs
 pydantic
+python-dotenv>=1.0,<2
 pyarrow
 pytest
 pytest-cov

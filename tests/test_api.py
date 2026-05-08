@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 
 from backtester.api.main import app
 from backtester.api.main import get_cors_origins
+from backtester.api.main import _selected_ai_model
+from backtester.api.main import _selected_ai_provider
 from backtester.api.schemas import (
     BacktestResponse,
     BacktestSeries,
@@ -36,6 +38,33 @@ def test_cors_origins_can_be_configured_from_comma_separated_value() -> None:
     origins = get_cors_origins("http://localhost:3001, https://example.test, ")
 
     assert origins == ["http://localhost:3001", "https://example.test"]
+
+
+def test_ai_startup_log_settings_default_to_fake(monkeypatch) -> None:
+    monkeypatch.delenv("BACKTESTER_AI_PROVIDER", raising=False)
+    monkeypatch.delenv("BACKTESTER_AI_MODEL", raising=False)
+
+    provider = _selected_ai_provider()
+
+    assert provider == "fake"
+    assert _selected_ai_model(provider) == "default"
+
+
+def test_ai_startup_log_settings_report_openrouter_default_model(monkeypatch) -> None:
+    monkeypatch.setenv("BACKTESTER_AI_PROVIDER", "openrouter")
+    monkeypatch.delenv("BACKTESTER_AI_MODEL", raising=False)
+
+    provider = _selected_ai_provider()
+
+    assert provider == "openrouter"
+    assert _selected_ai_model(provider) == "tencent/hy3-preview:free"
+
+
+def test_ai_startup_log_settings_preserve_configured_model(monkeypatch) -> None:
+    monkeypatch.setenv("BACKTESTER_AI_PROVIDER", "openrouter")
+    monkeypatch.setenv("BACKTESTER_AI_MODEL", "custom-model")
+
+    assert _selected_ai_model(_selected_ai_provider()) == "custom-model"
 
 
 def test_strategies_returns_supported_strategies() -> None:

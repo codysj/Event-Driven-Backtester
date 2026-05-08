@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections.abc import Mapping
@@ -23,6 +24,7 @@ from backtester.ai.schemas import (
     TargetMode,
 )
 from backtester.ai.validator import validate_strategy_draft
+from backtester.engine import PositionSizeMethod
 from backtester.strategy.rule_schema import (
     ConditionOperator,
     ConditionSpec,
@@ -43,6 +45,8 @@ DEFAULT_OPENROUTER_MODEL = "tencent/hy3-preview:free"
 DEFAULT_OPENROUTER_APP_NAME = "Backtest Lab"
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 30.0
 
+logger = logging.getLogger("uvicorn.error")
+
 
 class ProviderConfigurationError(ValueError):
     """Raised when the selected provider is disabled or misconfigured."""
@@ -54,6 +58,14 @@ class ProviderRequestError(RuntimeError):
 
 class ProviderTimeoutError(ProviderRequestError):
     """Raised when a provider request times out."""
+
+
+class ProviderDraftValidationError(ValueError):
+    """Raised when provider output cannot be coerced into a valid draft."""
+
+    def __init__(self, validation_errors: list[str]) -> None:
+        super().__init__("; ".join(validation_errors))
+        self.validation_errors = validation_errors
 
 
 @dataclass(frozen=True)
@@ -68,6 +80,19 @@ class StrategyDraftProviderConfig:
     timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS
     app_name: str | None = None
     app_url: str | None = None
+    use_response_format: bool = True
+
+
+@dataclass(frozen=True)
+class ProviderDiagnostics:
+    """Non-sensitive provider details for logs and validation diagnostics."""
+
+    provider_name: str
+    model: str
+    base_url: str
+    provider_class: str
+    api_key_configured: bool
+    response_format_enabled: bool
 
 
 class LLMProvider(Protocol):
@@ -355,6 +380,7 @@ class OpenAICompatibleStrategyDraftProvider:
         http_client: HttpChatClient | None = None,
         provider_name: str = "openai_compatible",
         extra_headers: Mapping[str, str] | None = None,
+        use_response_format: bool = True,
     ) -> None:
         if not api_key.strip():
             raise ProviderConfigurationError("BACKTESTER_AI_API_KEY is required for real AI providers.")
@@ -367,6 +393,7 @@ class OpenAICompatibleStrategyDraftProvider:
         self.http_client = http_client
         self.provider_name = provider_name
         self.extra_headers = dict(extra_headers or {})
+        self.use_response_format = use_response_format
 
     def draft_strategy(self, request: StrategyDraftRequest) -> ProviderDraft:
         """Request a structured draft from an OpenAI-compatible chat endpoint."""
@@ -377,8 +404,9 @@ class OpenAICompatibleStrategyDraftProvider:
                 {"role": "user", "content": request.prompt},
             ],
             "temperature": 0,
-            "response_format": {"type": "json_object"},
         }
+        if self.use_response_format:
+            payload["response_format"] = {"type": "json_object"}
         response = self._post_chat_completion(payload)
         content = _extract_chat_message_content(response)
         return _parse_provider_json(content)
@@ -390,12 +418,38 @@ class OpenAICompatibleStrategyDraftProvider:
             "Content-Type": "application/json",
             **self.extra_headers,
         }
+        logger.info(
+            "AI provider outbound request starting: provider=%s model=%s base_url=%s provider_class=%s api_key_configured=%s response_format_enabled=%s",
+            self.provider_name,
+            self.model,
+            self.base_url,
+            type(self).__name__,
+            "yes",
+            "yes" if self.use_response_format else "no",
+        )
         try:
             response = self._send_post(url, headers, payload)
         except httpx.TimeoutException as exc:
+            logger.warning(
+                "AI provider HTTP request timed out: provider=%s model=%s",
+                self.provider_name,
+                self.model,
+            )
             raise ProviderTimeoutError("AI provider timed out while drafting the strategy.") from exc
         except httpx.HTTPError as exc:
+            logger.warning(
+                "AI provider HTTP request failed: provider=%s model=%s error_type=%s",
+                self.provider_name,
+                self.model,
+                type(exc).__name__,
+            )
             raise ProviderRequestError("AI provider request failed.") from exc
+        logger.info(
+            "AI provider HTTP response: provider=%s model=%s status=%s",
+            self.provider_name,
+            self.model,
+            response.status_code,
+        )
 
         if response.status_code in {401, 403}:
             raise ProviderConfigurationError("AI provider rejected the configured server-side credentials.")
@@ -431,7 +485,9 @@ def get_strategy_draft_provider(
 ) -> LLMProvider:
     """Build the configured provider without exposing server-side secrets."""
     if env is None and prefer_fake_in_tests and _running_under_pytest():
-        return FakeStrategyDraftProvider()
+        selected_provider = FakeStrategyDraftProvider()
+        _log_provider_selection(_provider_diagnostics(selected_provider))
+        return selected_provider
 
     config = _provider_config_from_env(os.environ if env is None else env)
     if not config.enabled:
@@ -439,31 +495,39 @@ def get_strategy_draft_provider(
             "AI Strategy Builder is disabled. Set BACKTESTER_AI_ENABLED=true to enable provider-backed drafting."
         )
 
-    provider = config.provider
-    if provider == "fake":
-        return FakeStrategyDraftProvider()
-    if provider == "deepseek":
-        return _openai_compatible_provider(
+    provider_name = config.provider
+    if provider_name == "fake":
+        fake_provider = FakeStrategyDraftProvider()
+        _log_provider_selection(_provider_diagnostics(fake_provider))
+        return fake_provider
+    if provider_name == "deepseek":
+        compatible_provider = _openai_compatible_provider(
             config,
             default_base_url=DEFAULT_DEEPSEEK_BASE_URL,
             default_model=DEFAULT_DEEPSEEK_MODEL,
             provider_name="deepseek",
         )
-    if provider == "openrouter":
-        return _openai_compatible_provider(
+        _log_provider_selection(_provider_diagnostics(compatible_provider))
+        return compatible_provider
+    if provider_name == "openrouter":
+        compatible_provider = _openai_compatible_provider(
             config,
             default_base_url=DEFAULT_OPENROUTER_BASE_URL,
             default_model=DEFAULT_OPENROUTER_MODEL,
             provider_name="openrouter",
             extra_headers=_openrouter_headers(config),
         )
-    if provider == "openai_compatible":
-        return _openai_compatible_provider(
+        _log_provider_selection(_provider_diagnostics(compatible_provider))
+        return compatible_provider
+    if provider_name == "openai_compatible":
+        compatible_provider = _openai_compatible_provider(
             config,
             default_base_url=DEFAULT_OPENAI_COMPATIBLE_BASE_URL,
             default_model=DEFAULT_OPENAI_COMPATIBLE_MODEL,
             provider_name="openai_compatible",
         )
+        _log_provider_selection(_provider_diagnostics(compatible_provider))
+        return compatible_provider
 
     raise ProviderConfigurationError(
         "Unsupported BACKTESTER_AI_PROVIDER. Use fake, deepseek, openrouter, or openai_compatible."
@@ -477,6 +541,7 @@ def draft_strategy_from_request(
     """Create and validate a strategy draft from a natural-language request."""
     unsafe_terms = _unsupported_terms_in_prompt(request.prompt)
     if unsafe_terms:
+        logger.info("AI provider request skipped: unsupported prompt terms matched=%s", len(unsafe_terms))
         return _response_from_draft(_unsupported_prompt_draft(unsafe_terms))
 
     try:
@@ -491,7 +556,17 @@ def draft_strategy_from_request(
         )
 
     try:
-        draft = _coerce_provider_output(selected_provider.draft_strategy(request))
+        diagnostics = _provider_diagnostics(selected_provider)
+        logger.info(
+            "AI provider execution selected: provider=%s model=%s base_url=%s provider_class=%s api_key_configured=%s response_format_enabled=%s",
+            diagnostics.provider_name,
+            diagnostics.model,
+            diagnostics.base_url,
+            diagnostics.provider_class,
+            "yes" if diagnostics.api_key_configured else "no",
+            "yes" if diagnostics.response_format_enabled else "no",
+        )
+        draft = _coerce_provider_output(selected_provider.draft_strategy(request), diagnostics)
     except ProviderConfigurationError as exc:
         return StrategyDraftResponse(
             draft=None,
@@ -500,13 +575,13 @@ def draft_strategy_from_request(
             unsupported=[],
             validation_errors=[str(exc)],
         )
-    except ValueError as exc:
+    except ProviderDraftValidationError as exc:
         return StrategyDraftResponse(
             draft=None,
             status=StrategyDraftStatus.NEEDS_CLARIFICATION,
             warnings=["Provider returned an invalid strategy draft."],
             unsupported=[],
-            validation_errors=[str(exc)],
+            validation_errors=exc.validation_errors,
         )
     except ProviderTimeoutError:
         return StrategyDraftResponse(
@@ -553,8 +628,13 @@ def _response_from_draft(draft: StrategyDraft) -> StrategyDraftResponse:
 
 
 def _provider_config_from_env(env: Mapping[str, str]) -> StrategyDraftProviderConfig:
-    enabled = _parse_bool_env(env.get("BACKTESTER_AI_ENABLED"), default=True)
+    enabled = _parse_bool_env(env.get("BACKTESTER_AI_ENABLED"), default=True, name="BACKTESTER_AI_ENABLED")
     timeout_seconds = _parse_timeout_seconds(env.get("BACKTESTER_AI_TIMEOUT_SECONDS"))
+    use_response_format = _parse_bool_env(
+        env.get("BACKTESTER_AI_USE_RESPONSE_FORMAT"),
+        default=True,
+        name="BACKTESTER_AI_USE_RESPONSE_FORMAT",
+    )
     return StrategyDraftProviderConfig(
         enabled=enabled,
         provider=(env.get("BACKTESTER_AI_PROVIDER") or "fake").strip().lower(),
@@ -564,6 +644,7 @@ def _provider_config_from_env(env: Mapping[str, str]) -> StrategyDraftProviderCo
         timeout_seconds=timeout_seconds,
         app_name=_optional_env(env.get("BACKTESTER_AI_APP_NAME")),
         app_url=_optional_env(env.get("BACKTESTER_AI_APP_URL")),
+        use_response_format=use_response_format,
     )
 
 
@@ -586,6 +667,7 @@ def _openai_compatible_provider(
         timeout_seconds=config.timeout_seconds,
         provider_name=provider_name,
         extra_headers=extra_headers,
+        use_response_format=config.use_response_format,
     )
 
 
@@ -596,7 +678,7 @@ def _openrouter_headers(config: StrategyDraftProviderConfig) -> dict[str, str]:
     return headers
 
 
-def _parse_bool_env(raw: str | None, *, default: bool) -> bool:
+def _parse_bool_env(raw: str | None, *, default: bool, name: str) -> bool:
     if raw is None or raw.strip() == "":
         return default
     normalized = raw.strip().lower()
@@ -604,7 +686,7 @@ def _parse_bool_env(raw: str | None, *, default: bool) -> bool:
         return True
     if normalized in {"0", "false", "no", "off"}:
         return False
-    raise ProviderConfigurationError("BACKTESTER_AI_ENABLED must be true or false.")
+    raise ProviderConfigurationError(f"{name} must be true or false.")
 
 
 def _parse_timeout_seconds(raw: str | None) -> float:
@@ -630,14 +712,334 @@ def _running_under_pytest() -> bool:
     return "PYTEST_CURRENT_TEST" in os.environ
 
 
-def _coerce_provider_output(output: ProviderDraft) -> StrategyDraft:
+def _coerce_provider_output(output: ProviderDraft, diagnostics: ProviderDiagnostics) -> StrategyDraft:
     if isinstance(output, StrategyDraft):
         return output
+    normalized_output = _normalize_provider_output(output)
     try:
-        return StrategyDraft.model_validate(output)
+        return StrategyDraft.model_validate(normalized_output)
     except ValidationError as exc:
-        errors = "; ".join(str(error["msg"]) for error in exc.errors())
-        raise ValueError(errors) from exc
+        validation_errors = _validation_error_summary(exc, diagnostics)
+        logger.warning(
+            "AI provider returned invalid draft: provider=%s model=%s fields=%s error_count=%s",
+            diagnostics.provider_name,
+            diagnostics.model,
+            _failed_fields_text(exc),
+            len(exc.errors()),
+        )
+        raise ProviderDraftValidationError(validation_errors) from exc
+
+
+def _normalize_provider_output(output: Mapping[str, object]) -> dict[str, object]:
+    """Apply narrow provider-output repairs before the strict schema boundary."""
+    normalized = dict(output)
+
+    benchmark = normalized.get("benchmark")
+    if isinstance(benchmark, str):
+        boolean_value = _normalize_boolean_string(benchmark)
+        if boolean_value is not None:
+            normalized["benchmark"] = boolean_value
+
+    equity_sizing = normalized.get("equity_sizing")
+    sizing_fields = _normalize_equity_sizing(equity_sizing, normalized) if equity_sizing is not None else None
+    if sizing_fields is not None:
+        normalized.pop("equity_sizing")
+        normalized.update(sizing_fields)
+
+    rule_spec = normalized.get("rule_spec")
+    if rule_spec is not None:
+        normalized["rule_spec"] = _normalize_rule_spec(rule_spec)
+
+    return normalized
+
+
+def _normalize_boolean_string(value: str) -> bool | None:
+    normalized = value.strip().lower()
+    if normalized in {"yes", "true"}:
+        return True
+    if normalized in {"no", "false"}:
+        return False
+    return None
+
+
+def _normalize_equity_sizing(
+    value: object,
+    draft_fields: Mapping[str, object],
+) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+    if "position_size_method" in draft_fields or "position_size_value" in draft_fields:
+        return None
+
+    keys = set(value)
+    if keys <= {"method", "value"} and {"method", "value"} <= keys:
+        return _position_size_fields(value.get("method"), value.get("value"))
+    if keys <= {"position_size_method", "position_size_value"} and {"position_size_method", "position_size_value"} <= keys:
+        return _position_size_fields(value.get("position_size_method"), value.get("position_size_value"))
+    if keys == {"percent"}:
+        percent_value = _normalize_percent_equity_value(value.get("percent"))
+        if percent_value is None:
+            return None
+        return {
+            "position_size_method": PositionSizeMethod.PERCENT_EQUITY.value,
+            "position_size_value": percent_value,
+        }
+    return None
+
+
+def _position_size_fields(method_value: object, size_value: object) -> dict[str, object] | None:
+    method = _normalize_position_size_method(method_value)
+    size = _normalize_positive_number(size_value)
+    if method is None or size is None:
+        return None
+    if method in {PositionSizeMethod.PERCENT_EQUITY, PositionSizeMethod.VOLATILITY_TARGET}:
+        size = _normalize_percent_equity_value(size)
+        if size is None:
+            return None
+    return {
+        "position_size_method": method.value,
+        "position_size_value": size,
+    }
+
+
+def _normalize_position_size_method(value: object) -> PositionSizeMethod | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().upper().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "FIXED_SHARES": PositionSizeMethod.FIXED_QUANTITY,
+        "SHARES": PositionSizeMethod.FIXED_QUANTITY,
+        "DOLLARS": PositionSizeMethod.FIXED_DOLLAR,
+        "DOLLAR": PositionSizeMethod.FIXED_DOLLAR,
+        "PERCENT": PositionSizeMethod.PERCENT_EQUITY,
+        "PERCENTAGE": PositionSizeMethod.PERCENT_EQUITY,
+        "EQUITY_PERCENT": PositionSizeMethod.PERCENT_EQUITY,
+        "FULL_EQUITY": PositionSizeMethod.ALL_IN,
+    }
+    if normalized in aliases:
+        return aliases[normalized]
+    try:
+        return PositionSizeMethod[normalized]
+    except KeyError:
+        return None
+
+
+def _normalize_positive_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    number = float(value)
+    return number if number > 0 else None
+
+
+def _normalize_percent_equity_value(value: object) -> float | None:
+    number = _normalize_positive_number(value)
+    if number is None:
+        return None
+    if number <= 1:
+        return number
+    if number <= 100:
+        return number / 100
+    return None
+
+
+def _normalize_rule_spec(value: object) -> object:
+    if not isinstance(value, Mapping) or "rules" in value:
+        return value
+    if set(value) - {"indicators", "conditions"}:
+        return value
+    conditions = value.get("conditions")
+    if not isinstance(conditions, Mapping):
+        return value
+    indicator_map = _normalize_indicator_map(value.get("indicators"))
+    if indicator_map is None:
+        return value
+    normalized_rules = _normalize_rule_conditions(conditions, indicator_map)
+    if normalized_rules is None:
+        return value
+    rules, referenced_indicators = normalized_rules
+    if set(indicator_map) - referenced_indicators:
+        return value
+    return {"rules": rules}
+
+
+def _normalize_indicator_map(value: object) -> dict[str, dict[str, object]] | None:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        return None
+    indicators: dict[str, dict[str, object]] = {}
+    for key, raw_spec in value.items():
+        if not isinstance(key, str):
+            return None
+        indicator = _normalize_indicator_spec(raw_spec)
+        if indicator is None:
+            return None
+        indicators[key] = indicator
+    return indicators
+
+
+def _normalize_indicator_spec(value: object) -> dict[str, object] | None:
+    if not isinstance(value, Mapping):
+        return None
+    raw_spec = dict(value)
+    if "name" not in raw_spec and isinstance(raw_spec.get("type"), str):
+        raw_spec["name"] = raw_spec.pop("type")
+    elif "type" in raw_spec:
+        return None
+    try:
+        indicator = IndicatorSpec.model_validate(raw_spec)
+    except ValidationError:
+        return None
+    return cast(dict[str, object], indicator.model_dump(mode="json", exclude_none=True))
+
+
+def _normalize_rule_conditions(
+    conditions: Mapping[object, object],
+    indicator_map: Mapping[str, dict[str, object]],
+) -> tuple[dict[str, object], set[str]] | None:
+    if set(conditions) != {"entry", "exit"}:
+        return None
+    referenced_indicators: set[str] = set()
+    rules: dict[str, object] = {}
+    for side in ("entry", "exit"):
+        condition_values = conditions.get(side)
+        if not isinstance(condition_values, list) or not condition_values:
+            return None
+        normalized_conditions: list[dict[str, object]] = []
+        for condition_value in condition_values:
+            normalized = _normalize_rule_condition(condition_value, indicator_map)
+            if normalized is None:
+                return None
+            condition, references = normalized
+            normalized_conditions.append(condition)
+            referenced_indicators.update(references)
+        rules[side] = normalized_conditions
+    return rules, referenced_indicators
+
+
+def _normalize_rule_condition(
+    value: object,
+    indicator_map: Mapping[str, dict[str, object]],
+) -> tuple[dict[str, object], set[str]] | None:
+    if not isinstance(value, Mapping) or set(value) != {"left", "operator", "right"}:
+        return None
+    operator = value.get("operator")
+    if not isinstance(operator, str) or operator not in {item.value for item in ConditionOperator}:
+        return None
+
+    left = _normalize_indicator_reference(value.get("left"), indicator_map)
+    right = _normalize_indicator_reference(value.get("right"), indicator_map)
+    if left is None or right is None:
+        return None
+    left_spec, left_references = left
+    right_spec, right_references = right
+    condition: dict[str, object] = {"left": left_spec, "operator": operator, "right": right_spec}
+    try:
+        ConditionSpec.model_validate(condition)
+    except ValidationError:
+        return None
+    return condition, left_references | right_references
+
+
+def _normalize_indicator_reference(
+    value: object,
+    indicator_map: Mapping[str, dict[str, object]],
+) -> tuple[dict[str, object], set[str]] | None:
+    if isinstance(value, Mapping):
+        indicator = _normalize_indicator_spec(value)
+        if indicator is None:
+            return None
+        return indicator, set()
+    if not isinstance(value, str):
+        return None
+    if value in indicator_map:
+        return indicator_map[value], {value}
+    lowered = value.strip().lower()
+    if lowered in {item.value for item in IndicatorName}:
+        return {"name": lowered}, set()
+    return None
+
+
+def _provider_diagnostics(provider: LLMProvider) -> ProviderDiagnostics:
+    if isinstance(provider, OpenAICompatibleStrategyDraftProvider):
+        return ProviderDiagnostics(
+            provider_name=provider.provider_name,
+            model=provider.model,
+            base_url=provider.base_url,
+            provider_class=type(provider).__name__,
+            api_key_configured=bool(provider.api_key),
+            response_format_enabled=provider.use_response_format,
+        )
+    if isinstance(provider, FakeStrategyDraftProvider):
+        return ProviderDiagnostics(
+            provider_name="fake",
+            model="none",
+            base_url="none",
+            provider_class=type(provider).__name__,
+            api_key_configured=False,
+            response_format_enabled=False,
+        )
+    return ProviderDiagnostics(
+        provider_name=type(provider).__name__,
+        model="unknown",
+        base_url="unknown",
+        provider_class=type(provider).__name__,
+        api_key_configured=False,
+        response_format_enabled=False,
+    )
+
+
+def _log_provider_selection(diagnostics: ProviderDiagnostics) -> None:
+    logger.info(
+        "AI provider selected: provider=%s model=%s base_url=%s provider_class=%s api_key_configured=%s response_format_enabled=%s",
+        diagnostics.provider_name,
+        diagnostics.model,
+        diagnostics.base_url,
+        diagnostics.provider_class,
+        "yes" if diagnostics.api_key_configured else "no",
+        "yes" if diagnostics.response_format_enabled else "no",
+    )
+
+
+def _validation_error_summary(exc: ValidationError, diagnostics: ProviderDiagnostics) -> list[str]:
+    fields = _failed_fields_text(exc)
+    details = [_validation_error_detail(error) for error in exc.errors()[:5]]
+    if len(exc.errors()) > 5:
+        details.append(f"{len(exc.errors()) - 5} additional validation error(s) omitted.")
+    return [
+        (
+            f"Provider draft validation failed for provider={diagnostics.provider_name} "
+            f"model={diagnostics.model}; fields={fields}."
+        ),
+        *details,
+    ]
+
+
+def _failed_fields_text(exc: ValidationError) -> str:
+    fields = sorted({_top_level_field(error) for error in exc.errors()})
+    return ", ".join(fields) if fields else "unknown"
+
+
+def _validation_error_detail(error: Mapping[str, object]) -> str:
+    location = _error_location(error)
+    message = error.get("msg")
+    text = message if isinstance(message, str) else "Invalid value."
+    return f"{location}: {text}"
+
+
+def _top_level_field(error: Mapping[str, object]) -> str:
+    location = error.get("loc")
+    if isinstance(location, tuple) and location:
+        first = location[0]
+        return str(first)
+    return "unknown"
+
+
+def _error_location(error: Mapping[str, object]) -> str:
+    location = error.get("loc")
+    if isinstance(location, tuple) and location:
+        return ".".join(str(item) for item in location)
+    return "unknown"
 
 
 def _extract_chat_message_content(response: Mapping[str, object]) -> str:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date, datetime
 from numbers import Real
 
 import pandas as pd
@@ -614,14 +615,20 @@ def _row_parameters(row: pd.Series) -> dict[str, int | float]:
         if key in row.index and not pd.isna(row[key]):
             value = row[key]
             if isinstance(value, Real):
-                parameters[key] = int(value) if float(value).is_integer() else float(value)
+                parameters[key] = _response_number(value, field_name=key)
     return parameters
 
 
 def _cell_number(value: object) -> int | float:
-    if isinstance(value, Real):
-        return int(value) if float(value).is_integer() else float(value)
-    return 0.0
+    return _response_number(value, field_name="heatmap parameter value")
+
+
+def _response_number(value: object, *, field_name: str) -> int | float:
+    if not isinstance(value, Real):
+        msg = f"{field_name} must be numeric."
+        raise TypeError(msg)
+    as_float = float(value)
+    return int(as_float) if as_float.is_integer() else as_float
 
 
 def _optional_float(value: object) -> float | None:
@@ -669,7 +676,14 @@ def _degradation_ratio(train_value: float | None, test_value: float | None) -> f
 
 
 def _index_date(value: object) -> str:
-    return pd.Timestamp(value).date().isoformat()
+    if isinstance(value, pd.Timestamp):
+        timestamp = value
+    elif isinstance(value, datetime | date | str | int | float):
+        timestamp = pd.Timestamp(value)
+    else:
+        msg = "Index values must be date-like."
+        raise TypeError(msg)
+    return timestamp.date().isoformat()
 
 
 def _average(values: list[float]) -> float | None:

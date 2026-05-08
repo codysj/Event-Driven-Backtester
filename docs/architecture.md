@@ -15,7 +15,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - `backtester/data/`
   - Fetches OHLCV data with yfinance, cleans it, validates schema, and caches Parquet files under `~/.backtester/cache/`.
 - `backtester/ai/`
-  - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
+  - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, limited provider-output normalization, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
 - `backtester/strategy/`
   - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, constrained rule DSL schemas, `RuleBasedStrategy`, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
@@ -97,14 +97,16 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 
 1. A client submits a prompt to `POST /api/ai/strategy-draft`.
 2. The API calls `get_strategy_draft_provider()`, which selects the deterministic fake provider by default or an opt-in server-side OpenAI-compatible provider from backend environment variables.
-3. The provider returns a constrained `StrategyDraft` describing a single-run, grid-search, walk-forward, or unspecified target. Real-provider responses are parsed as JSON, checked for raw code-looking output, and validated into the same Pydantic schema.
-4. `backtester/ai/validator.py` checks semantic safety: ticker readiness, ISO dates, date order, supported strategy kind, positive windows, momentum window ordering, mean-reversion bands, unsupported concepts, and raw-code fields.
-5. The API returns structured JSON containing the draft, status, warnings, unsupported items, and validation errors.
-6. A reviewed draft can be submitted to `POST /api/ai/compile`.
-7. `backtester/ai/compiler.py` maps the draft into an existing `BacktestRequest`, `GridSearchRequest`, or `WalkForwardRequest` payload.
-8. Rule-based drafts compile to a single-run `BacktestRequest` with a strict `rule_spec`; built-in momentum and mean-reversion drafts can also compile to research workflows.
-9. Missing research grids, date ranges, optimization metrics, and walk-forward windows use deterministic defaults with warnings.
-10. The compiled payload is not executed. Clients must submit it to the existing workflow endpoints if they choose to run it.
+3. The provider returns a constrained draft describing a single-run, grid-search, walk-forward, or unspecified target. Real-provider responses are parsed as JSON and checked for raw code-looking output.
+4. A limited normalization step repairs only deterministic schema-adjacent mistakes before validation: simple boolean strings for `benchmark`, clear `equity_sizing` objects into `position_size_method`/`position_size_value`, and clean `rule_spec.conditions` references into the existing `rule_spec.rules` DSL.
+5. `StrategyDraft` Pydantic validation remains the strict boundary. Unexpected fields, ambiguous sizing, malformed rule specs, unsupported indicators/operators, and extra provider output are rejected with sanitized validation errors.
+6. `backtester/ai/validator.py` checks semantic safety: ticker readiness, ISO dates, date order, supported strategy kind, positive windows, momentum window ordering, mean-reversion bands, unsupported concepts, and raw-code fields.
+7. The API returns structured JSON containing the draft, status, warnings, unsupported items, and validation errors.
+8. A reviewed draft can be submitted to `POST /api/ai/compile`.
+9. `backtester/ai/compiler.py` maps the draft into an existing `BacktestRequest`, `GridSearchRequest`, or `WalkForwardRequest` payload.
+10. Rule-based drafts compile to a single-run `BacktestRequest` with a strict `rule_spec`; built-in momentum and mean-reversion drafts can also compile to research workflows.
+11. Missing research grids, date ranges, optimization metrics, and walk-forward windows use deterministic defaults with warnings.
+12. The compiled payload is not executed. Clients must submit it to the existing workflow endpoints if they choose to run it.
 
 ### Rule-Based Strategy DSL Flow
 
@@ -112,7 +114,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 2. The spec contains only enum-backed indicators and operators:
    - indicators: `close`, `sma`, `rolling_high`, `rolling_low`, `bollinger_upper`, `bollinger_lower`
    - operators: `>`, `<`, `>=`, `<=`, `crosses_above`, `crosses_below`
-3. API schemas validate the nested `rule_spec` with `extra="forbid"` before strategy construction.
+3. API schemas validate the nested `rule_spec` with `extra="forbid"` before strategy construction. AI provider normalization may translate one narrow indicator/conditions shape into this DSL, but only when every condition validates and no unused or unsupported indicators remain.
 4. `backtester/api/services.py` builds `RuleBasedStrategy` server-side from the structured spec.
 5. `RuleBasedStrategy.precompute(data)` calculates indicator arrays from Pandas/NumPy only.
 6. `generate_signal(data, current_index)` reads only current and previous indicator values. Entry conditions use ALL logic; exit conditions use ANY logic.
@@ -318,7 +320,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Backtest Lab is deliberately a single-asset API client even though the Python engine supports multi-asset backtests.
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
-- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder. OpenRouter support does not change this flow: draft JSON is validated, compiled only into existing API request payloads, and never executed automatically.
+- AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON, may pass through only limited deterministic normalization, and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder. OpenRouter support does not change this flow: draft JSON is validated, compiled only into existing API request payloads, and never executed automatically.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation
