@@ -82,10 +82,10 @@ def _response_from_state(state: ResearchGraphState) -> ResearchGraphResponse:
 
 
 def _status_from_state(state: ResearchGraphState) -> ResearchStatus:
-    if state.workflow_result is not None:
-        return "completed"
     if state.validation_errors:
         return "blocked"
+    if state.workflow_result is not None:
+        return "completed"
     if state.approval_required:
         return "awaiting_approval"
     return "drafted"

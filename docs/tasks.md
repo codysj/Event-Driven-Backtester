@@ -2,6 +2,13 @@
 
 ## Now
 
+- Research Copilot hardening pass completed:
+  - Approval now revalidates the browser-returned compiled payload against the existing API request schema immediately before execution.
+  - Malformed or tampered approval payloads return sanitized field-level errors, clear the compiled payload from the returned state, and do not echo raw browser-supplied values.
+  - Already-executed states are blocked from a second approval run and report blocked status instead of completed status.
+  - Tests now cover no-execution-before-approval, mismatched approval, one approved service call, malformed approval sanitization, already-executed approval blocking, deterministic grid-search analysis, deterministic walk-forward analysis, and Research Copilot API endpoint behavior.
+  - The Research Copilot load/approval UI disables actions unless a ready compiled payload with no validation errors is present.
+
 - Backtest Lab Research Copilot UI added:
   - New Research Copilot mode calls `POST /api/ai/research-plan` and displays graph steps, status, target mode, draft details, compiled payload JSON, warnings, unsupported items, and validation errors.
   - Approval remains explicit through a button that sends the prior state plus matching `approved_action` to `POST /api/ai/research-approve`.
@@ -40,7 +47,7 @@ The latest research-workstation batch added:
 ## Next
 
 - Manually test Research Copilot with the API and frontend running together, then capture updated portfolio screenshots if desired.
-- Decide whether Research Copilot sessions need persistence after the request/response UI has been exercised.
+- Decide whether Research Copilot sessions need persistence only if a future durable audit or saved-run feature is explicitly requested.
 - Expose multi-asset backtesting through FastAPI if the dashboard roadmap needs it.
 - Expand the rule DSL only when there is a tested strategy intent contract for more indicators, OR composition, and research optimization.
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.

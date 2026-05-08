@@ -131,6 +131,8 @@ def optionally_run_workflow(
         result = run_approved_workflow(state.target_mode, state.approved_action, state.compile_payload, selected_runner)
     except ValueError as exc:
         next_state = state.append_validation_errors([str(exc)])
+        if str(exc).startswith("Compiled payload did not match"):
+            next_state = next_state.model_copy(update={"compile_payload": None, "approval_required": False})
         return next_state.add_event(ResearchStep.RUN_WORKFLOW, "Workflow run was rejected.")
 
     summary = summarize_workflow_result(state.target_mode, result)

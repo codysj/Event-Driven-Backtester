@@ -3,14 +3,19 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from backtester.agents import ApprovedAction, ResearchGraphState, run_research_graph
+from backtester.agents import ApprovedAction, ResearchGraphState, WorkflowResultSummary, run_research_graph
+from backtester.agents.tools import analyze_workflow_summary
 from backtester.ai import FakeStrategyDraftProvider
-from backtester.ai.schemas import StrategyDraftRequest
+from backtester.ai.schemas import StrategyDraftRequest, TargetMode
 from backtester.api.schemas import (
+    BacktestResponse,
+    BacktestSeries,
+    BacktestSummary,
     GridSearchResponse,
     GridSearchRow,
     HeatmapPoint,
     RobustnessAnalysis,
+    SeriesPoint,
 )
 
 
@@ -97,6 +102,35 @@ class CountingRunner:
         raise AssertionError("walk-forward should not be called in this test")
 
 
+class MultiWorkflowRunner(CountingRunner):
+    def run_backtest(self, request: object) -> BacktestResponse:
+        self.calls.append("run_backtest")
+        return BacktestResponse(
+            config={"ticker": getattr(request, "ticker", "AAPL")},
+            summary=BacktestSummary(
+                strategy_name="Momentum(20/100)",
+                ticker=getattr(request, "ticker", "AAPL"),
+                initial_value=100000.0,
+                final_value=99000.0,
+                total_return=-0.01,
+                annualized_return=-0.02,
+                sharpe_ratio=-0.1,
+                sortino_ratio=-0.2,
+                max_drawdown=-0.35,
+                win_rate=0.25,
+                profit_factor=0.8,
+                total_trades=2,
+            ),
+            series=BacktestSeries(
+                equity=[SeriesPoint(date="2020-01-01", value=100000.0)],
+                benchmark=[],
+                drawdown=[SeriesPoint(date="2020-01-01", value=0.0)],
+                price=[],
+            ),
+            trades=[],
+        )
+
+
 class MalformedProvider:
     def draft_strategy(self, request: StrategyDraftRequest) -> Mapping[str, object]:
         del request
@@ -163,6 +197,63 @@ def test_graph_resumes_with_approval_and_calls_runner_once() -> None:
     assert result.workflow_result.summary["failed_combinations"] == 1
     assert any("grid-search combination" in note for note in result.analysis)
     assert result.approval_required is False
+
+
+def test_graph_single_run_approval_calls_only_backtest_once() -> None:
+    runner = MultiWorkflowRunner()
+    first = run_research_graph(
+        ResearchGraphState(user_goal="Run AAPL from 2018 to 2024 using a 20/100 SMA crossover"),
+        provider=FakeStrategyDraftProvider(),
+        workflow_runner=runner,
+    )
+    approved = first.model_copy(update={"approved_action": ApprovedAction.RUN_BACKTEST})
+
+    result = run_research_graph(approved, provider=FakeStrategyDraftProvider(), workflow_runner=runner)
+
+    assert runner.calls == ["run_backtest"]
+    assert result.workflow_result is not None
+    assert result.workflow_result.target_mode == TargetMode.SINGLE_RUN
+    assert any("Max drawdown is high" in note for note in result.analysis)
+    assert any("Trade count is sparse" in note for note in result.analysis)
+
+
+def test_graph_malformed_approved_payload_error_is_sanitized() -> None:
+    secret = "sk-browser-payload-secret"
+    first = run_research_graph(
+        ResearchGraphState(user_goal="Optimize AAPL using a 20/100 SMA crossover"),
+        provider=FakeStrategyDraftProvider(),
+        workflow_runner=CountingRunner(),
+    )
+    tampered = first.model_copy(
+        update={
+            "approved_action": ApprovedAction.RUN_GRID_SEARCH,
+            "compile_payload": {"ticker": "AAPL", "secret_payload": secret},
+        }
+    )
+
+    result = run_research_graph(tampered, provider=FakeStrategyDraftProvider(), workflow_runner=CountingRunner())
+    serialized = json.dumps(result.model_dump(mode="json"))
+
+    assert result.workflow_result is None
+    assert result.validation_errors
+    assert "Compiled payload did not match the grid-search request schema" in result.validation_errors[-1]
+    assert "fields=" in result.validation_errors[-1]
+    assert secret not in serialized
+
+
+def test_deterministic_walk_forward_summary_analysis() -> None:
+    summary = WorkflowResultSummary(
+        target_mode=TargetMode.WALK_FORWARD,
+        summary={"average_degradation": 0.25},
+        warnings=["Parameter selection was unstable across folds."],
+    )
+
+    notes = analyze_workflow_summary(summary)
+
+    assert notes == [
+        "Parameter selection was unstable across folds.",
+        "Walk-forward validation shows substantial out-of-sample degradation.",
+    ]
 
 
 def test_graph_handles_validation_failure_without_raw_provider_payload() -> None:

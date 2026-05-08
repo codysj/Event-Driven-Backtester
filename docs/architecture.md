@@ -65,6 +65,7 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - FastAPI `POST /api/ai/research-approve` resumes a prior response state and executes at most one existing workflow when approval matches the compiled target mode.
 - `backtester/agents/research_graph.py` wires the research workflow with LangGraph when the backend dependency is installed. Importing the package does not require LangGraph; direct graph construction without it raises a sanitized dependency error, while the high-level runner can still use the same local state transitions for deterministic tests.
 - `backtester/agents/nodes.py` reuses the existing AI provider, draft validator, compiler, and API service wrappers. It never runs a compiled payload until an explicit matching `approved_action` is present.
+- `backtester/agents/tools.py` revalidates approved payload JSON with the existing API request schemas, runs only the matching service method, and reports malformed payload errors without including raw payload values.
 - Frontend `frontend/lib/api.ts` isolates API calls from UI components.
 - Frontend `frontend/lib/validation.ts` performs inline form validation before POST requests.
 
@@ -156,9 +157,10 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 5. The graph stops at `await_user_approval` with `approval_required=true` when a compiled payload is ready and no explicit approval is present. The plan endpoint returns sanitized state and never runs `backtest`, `grid-search`, or `walk-forward`.
 6. `POST /api/ai/research-approve` accepts the prior response state plus `approved_action`, then sets exactly one matching action: `run_backtest`, `run_grid_search`, or `run_walk_forward`.
 7. Mismatched approval is recorded as a validation error and no workflow is run.
-8. Approved execution uses thin wrappers around existing API service functions only, refuses already-executed response states, and does not create server-side sessions.
-9. There are no filesystem, shell, generated-code, broker, live-trading, auth, database, or persistence tools.
-10. Result analysis is deterministic and heuristic. It summarizes high drawdown, sparse trades, failed grid combinations, benchmark underperformance where available, and walk-forward degradation. It is transparent research commentary, not prediction.
+8. Approved execution uses thin wrappers around existing API service functions only, refuses already-executed response states, revalidates the browser-returned compiled payload against the target request schema, and does not create server-side sessions.
+9. Malformed or tampered approval payloads return sanitized field-level validation messages and clear the compiled payload from the response so raw browser-supplied values are not echoed back.
+10. There are no filesystem, shell, generated-code, broker, live-trading, auth, database, or persistence tools.
+11. Result analysis is deterministic and heuristic. It summarizes high drawdown, sparse trades, failed grid combinations, benchmark underperformance where available, and walk-forward degradation. It is transparent research commentary, not prediction.
 
 ### Browser Grid Search Flow
 
@@ -385,7 +387,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
 - AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON, may pass through only limited deterministic normalization, and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder. OpenRouter support does not change this flow: draft JSON is validated, compiled only into existing API request payloads, and never executed automatically.
-- The Research Copilot graph preserves that same boundary. It can resume and run one existing workflow only after explicit matching approval. The API and frontend use request/response state passing only: no server-side session persistence, auth, database, broker integration, generated-code execution, or frontend API-key handling is added.
+- The Research Copilot graph preserves that same boundary. It can resume and run one existing workflow only after explicit matching approval. The API and frontend use request/response state passing only: no server-side session persistence, auth, database, broker integration, generated-code execution, or frontend API-key handling is added. Because the browser returns state to the approval endpoint, the backend treats the compiled payload as untrusted and validates it again before execution.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

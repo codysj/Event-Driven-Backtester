@@ -309,6 +309,55 @@ def test_research_approval_executes_one_mocked_workflow(monkeypatch) -> None:  #
     assert payload["workflow_result"]["summary"]["total_combinations"] == 1
 
 
+def test_research_approval_refuses_already_executed_state(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    calls: list[str] = []
+
+    def fake_grid_search(request):  # type: ignore[no-untyped-def]
+        calls.append("grid")
+        return GridSearchResponse(
+            config={"ticker": request.ticker},
+            strategy_id=request.strategy,
+            strategy_name="Momentum SMA Crossover",
+            optimization_metric=request.optimization_metric,
+            total_combinations=1,
+            results=[],
+            failed_combinations=[],
+            best_parameters=None,
+            best_row=None,
+            heatmap=[],
+            analysis=RobustnessAnalysis(
+                robustness_score=90,
+                warnings=[],
+                notes=[],
+                nearby_parameter_stability=None,
+                trade_count_flags=[],
+                drawdown_flags=[],
+                overfit_risk_flags=[],
+            ),
+        )
+
+    monkeypatch.setattr("backtester.agents.tools.run_grid_search_from_request", fake_grid_search)
+    plan = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Optimize AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    ).json()
+    completed = client.post(
+        "/api/ai/research-approve",
+        json={"state": plan, "approved_action": "run_grid_search"},
+    ).json()
+
+    response = client.post(
+        "/api/ai/research-approve",
+        json={"state": completed, "approved_action": "run_grid_search"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert calls == ["grid"]
+    assert payload["status"] == "blocked"
+    assert any("already contains a workflow result" in error for error in payload["validation_errors"])
+
+
 def test_research_approval_refuses_mismatched_action(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
@@ -334,6 +383,26 @@ def test_research_approval_refuses_mismatched_action(monkeypatch) -> None:  # ty
     assert payload["status"] == "blocked"
     assert payload["approval_required"] is True
     assert any("approved_action must be run_grid_search" in error for error in payload["validation_errors"])
+
+
+def test_research_approval_sanitizes_malformed_compiled_payload() -> None:
+    secret = "sk-approval-secret"
+    plan = client.post(
+        "/api/ai/research-plan",
+        json={"user_goal": "Optimize AAPL from 2018 to 2024 using a 20/100 SMA crossover"},
+    ).json()
+    plan["compile_payload"] = {"ticker": "AAPL", "secret_payload": secret}
+
+    response = client.post(
+        "/api/ai/research-approve",
+        json={"state": plan, "approved_action": "run_grid_search"},
+    )
+
+    assert response.status_code == 200
+    assert secret not in response.text
+    payload = response.json()
+    assert payload["status"] == "blocked"
+    assert any("Compiled payload did not match the grid-search request schema" in error for error in payload["validation_errors"])
 
 
 def test_research_plan_sanitizes_validation_errors(monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Protocol
+
+from pydantic import ValidationError
 
 from backtester.agents.research_state import ApprovedAction, WorkflowResultSummary, action_for_target_mode
 from backtester.ai.schemas import TargetMode
@@ -63,11 +66,11 @@ def run_approved_workflow(
         raise ValueError(msg)
 
     if approved_action == ApprovedAction.RUN_BACKTEST:
-        return runner.run_backtest(BacktestRequest.model_validate(payload))
+        return runner.run_backtest(_validate_backtest_payload(payload))
     if approved_action == ApprovedAction.RUN_GRID_SEARCH:
-        return runner.run_grid_search(GridSearchRequest.model_validate(payload))
+        return runner.run_grid_search(_validate_grid_search_payload(payload))
     if approved_action == ApprovedAction.RUN_WALK_FORWARD:
-        return runner.run_walk_forward(WalkForwardRequest.model_validate(payload))
+        return runner.run_walk_forward(_validate_walk_forward_payload(payload))
 
     msg = f"Unsupported approved_action: {approved_action.value}."
     raise ValueError(msg)
@@ -185,3 +188,39 @@ def _unique_strings(values: list[str]) -> list[str]:
             unique.append(value)
             seen.add(value)
     return unique
+
+
+def _validate_backtest_payload(payload: dict[str, object]) -> BacktestRequest:
+    try:
+        return BacktestRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError(_payload_validation_message("backtest", exc)) from exc
+
+
+def _validate_grid_search_payload(payload: dict[str, object]) -> GridSearchRequest:
+    try:
+        return GridSearchRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError(_payload_validation_message("grid-search", exc)) from exc
+
+
+def _validate_walk_forward_payload(payload: dict[str, object]) -> WalkForwardRequest:
+    try:
+        return WalkForwardRequest.model_validate(payload)
+    except ValidationError as exc:
+        raise ValueError(_payload_validation_message("walk-forward", exc)) from exc
+
+
+def _payload_validation_message(workflow: str, exc: ValidationError) -> str:
+    fields = sorted({_error_location(error) for error in exc.errors()})
+    field_text = ", ".join(fields[:8]) if fields else "unknown"
+    if len(fields) > 8:
+        field_text = f"{field_text}, {len(fields) - 8} more"
+    return f"Compiled payload did not match the {workflow} request schema; fields={field_text}."
+
+
+def _error_location(error: Mapping[str, object]) -> str:
+    location = error.get("loc")
+    if isinstance(location, tuple) and location:
+        return ".".join(str(item) for item in location)
+    return "unknown"

@@ -28,7 +28,10 @@ function uniqueMessages(...groups: string[][]): string[] {
 
 function responseForLoad(state: ResearchGraphResponse): StrategyCompileResponse | null {
   if (!state.compile_payload || state.target_mode === null) return null;
-  if (state.compile_response) return state.compile_response;
+  if (state.compile_response) {
+    return state.compile_response.status === "ready" && state.compile_response.payload ? state.compile_response : null;
+  }
+  if (state.status === "blocked" || state.target_mode === "unspecified" || state.validation_errors.length > 0) return null;
   return {
     target_mode: state.target_mode,
     status: "ready",
@@ -61,6 +64,7 @@ export function ResearchCopilotPanel({ onLoadCompiled }: ResearchCopilotPanelPro
     () => uniqueMessages(researchState?.validation_errors ?? [], researchState?.compile_response?.validation_errors ?? []),
     [researchState]
   );
+  const loadableResponse = useMemo(() => (researchState ? responseForLoad(researchState) : null), [researchState]);
 
   async function submitPlan(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -107,9 +111,7 @@ export function ResearchCopilotPanel({ onLoadCompiled }: ResearchCopilotPanelPro
   }
 
   function loadCurrentPayload() {
-    if (!researchState) return;
-    const response = responseForLoad(researchState);
-    if (response) loadCompiled(response);
+    if (loadableResponse) loadCompiled(loadableResponse);
   }
 
   return (
@@ -184,7 +186,8 @@ export function ResearchCopilotPanel({ onLoadCompiled }: ResearchCopilotPanelPro
           <button
             type="button"
             onClick={loadCurrentPayload}
-            disabled={!researchState?.compile_payload}
+            disabled={!loadableResponse}
+            title={loadableResponse ? "Load the compiled request into its existing workflow form" : "A ready compiled payload with no validation errors is required first"}
             className="inline-flex items-center justify-center rounded-lg border border-lab-border bg-lab-card px-3 py-2 text-sm font-semibold text-lab-secondary transition hover:border-lab-blue hover:text-lab-text disabled:cursor-not-allowed disabled:opacity-50"
           >
             Load compiled payload

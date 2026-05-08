@@ -88,6 +88,7 @@ Last documentation pass: 2026-05-08.
   - A resumed state must provide a matching `approved_action` (`run_backtest`, `run_grid_search`, or `run_walk_forward`) before one existing workflow can run. Mismatched approval records a validation error and does not run.
   - `POST /api/ai/research-plan` exposes the draft-and-compile path and returns sanitized graph state without execution.
   - `POST /api/ai/research-approve` accepts prior response state plus one explicit approval, refuses mismatched or already-executed states, and runs at most one existing workflow through the service wrappers.
+  - Approval payloads are revalidated against the existing API request schemas immediately before execution. Malformed or tampered payloads return sanitized field-level errors, clear the compiled payload from the response, and do not echo raw browser-supplied values.
   - Deterministic result analysis surfaces heuristic notes for benchmark underperformance where available, high drawdown, sparse trades, failed grid combinations, and walk-forward degradation.
   - No frontend UI, generated code execution, shell/filesystem tools, broker integration, auth, database persistence, server-side sessions, or live trading was added.
 - Backtest Lab frontend:
@@ -116,7 +117,7 @@ Last documentation pass: 2026-05-08.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
-- Research Copilot is available in Backtest Lab and has no server-side session persistence; the browser passes sanitized response state back to `/api/ai/research-approve`.
+- Research Copilot is available in Backtest Lab and has no server-side session persistence; the browser passes sanitized response state back to `/api/ai/research-approve`. The backend treats returned state as untrusted and revalidates the compiled payload before execution.
 - AI Strategy Builder can optionally call OpenRouter, another real OpenAI-compatible provider, or the optional LangChain OpenAI-compatible adapter when backend env vars and dependencies are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1, and rule-based drafts must conform to the internal `rule_spec.rules` DSL. OpenRouter free models may be rate-limited, temporarily unavailable, lower quality than paid models, or prone to imperfect JSON/schema output; only limited deterministic normalization is applied before strict validation rejects the rest.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
@@ -146,6 +147,7 @@ Last documentation pass: 2026-05-08.
 
 - Decide whether to expose multi-asset runs through FastAPI, CLI, and Backtest Lab.
 - Exercise the Backtest Lab Research Copilot workflow manually against a running FastAPI backend before capturing screenshots.
+- Keep Research Copilot approval state request/response-only unless a future durable audit or saved-run feature is explicitly requested.
 - Decide later whether Research Copilot needs persistence; current API intentionally uses request/response state passing only.
 - Add richer walk-forward visuals if the table-first workflow needs more portfolio polish.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
@@ -167,6 +169,15 @@ cd frontend && npm run build
 
 Recent documented results:
 
+- `python -m pytest`: not run successfully during the 2026-05-08 hardening pass. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
+- `.\.venv\Scripts\python.exe -m pytest`: success after Research Copilot hardening. 207 passed with existing LangGraph/Python deprecation warnings.
+- `python -m mypy backtester`: not run successfully during the 2026-05-08 hardening pass for the same missing `python` PATH issue.
+- `.\.venv\Scripts\python.exe -m mypy backtester`: success after Research Copilot hardening. No issues found in 45 source files.
+- `cmd /c npm install` from `frontend/`: success. Packages were already up to date.
+- `cmd /c npm audit` from `frontend/`: initial sandboxed run failed because the npm audit endpoint returned an error; rerun outside the sandbox succeeded with `found 0 vulnerabilities`.
+- `cmd /c npm run lint` from `frontend/`: success.
+- `cmd /c npm run typecheck` from `frontend/`: success. `next typegen` generated route types and `tsc --noEmit` passed, including the Research Copilot API types.
+- `cmd /c npm run build` from `frontend/`: success. Next.js 15.5.15 production build compiled successfully and generated 4 static pages.
 - `.\.venv\Scripts\python.exe -m pip install "langgraph>=0.2,<1"`: success. Installed the newly declared backend Research Copilot graph dependency into the local venv for validation.
 - `.\.venv\Scripts\python.exe -m pytest`: success after adding the backend Research Copilot skeleton. 197 passed with LangGraph deprecation warnings from the installed dependency.
 - `.\.venv\Scripts\python.exe -m mypy backtester`: success after adding the backend Research Copilot skeleton. No issues found in 43 source files.

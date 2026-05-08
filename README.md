@@ -207,7 +207,7 @@ Endpoints:
 - `POST /api/ai/research-approve`
   - Resumes a prior response state and runs exactly one approved existing workflow when `approved_action` matches the compiled target.
   - Supported actions are `run_backtest`, `run_grid_search`, and `run_walk_forward`.
-  - Mismatched approval, missing compiled payloads, prior executed states, or unsupported targets return validation errors without running a workflow.
+  - Mismatched approval, missing or malformed compiled payloads, prior executed states, unsupported targets, and already-blocked states return sanitized validation errors without running a workflow. Malformed approval payloads are not echoed back to the browser.
 
 By default, the frontend calls `http://localhost:8000`. Override this with `frontend/.env.local`:
 
@@ -320,6 +320,29 @@ Free LLMs may produce imperfect JSON or schema-adjacent fields. The system corre
 
 yfinance may require network access unless the requested data is already cached.
 
+## Research Copilot Local Demo
+
+1. Start FastAPI from the repo root:
+
+   ```bash
+   python -m uvicorn backtester.api.main:app --reload
+   ```
+
+2. Start Backtest Lab in a second terminal:
+
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+3. Open `http://localhost:3000` and switch to Research Copilot.
+4. Submit: `Find a robust AAPL momentum strategy from 2018 to 2023 and compare against buy-and-hold`.
+5. Review the graph steps, inferred draft, warnings, and compiled payload JSON.
+6. Approve exactly one workflow run with the enabled approval button.
+7. Inspect the returned workflow summary, deterministic analysis, and recommended next step.
+
+The demo remains local and single-asset. Research Copilot uses LangGraph for backend state transitions and LangChain only when the optional structured-output provider is selected. It never exposes backend AI keys to the browser, never runs generated code, and never calls a workflow before explicit matching approval.
+
 ## Python Usage
 
 Single-asset example:
@@ -427,6 +450,7 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 
 - Backtest Lab research workflows are still single-asset only.
 - Research Copilot is available in Backtest Lab through request/response state passing. It has no server-side session persistence.
+- Research Copilot approval state is browser-passed JSON, so it should be treated as local demo state rather than durable audit storage. The backend revalidates the compiled payload on approval and blocks malformed or mismatched payloads.
 - AI Strategy Builder uses a fake deterministic provider by default and can call opt-in server-side OpenAI-compatible, OpenRouter, or LangChain OpenAI-compatible providers when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. Rule-based DSL support is intentionally small: no generated Python, EMA/RSI, arbitrary formulas, multi-asset rules, or rule-grid optimization yet. The frontend can review and load compiled configs, but it does not run them automatically.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
 - Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.
