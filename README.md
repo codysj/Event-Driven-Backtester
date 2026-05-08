@@ -32,11 +32,13 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 - Single-asset grid search with API-ready result rows, failed-combination capture, heatmap data, and deterministic robustness warnings.
 - Single-asset walk-forward validation with train/test folds and aggregate degradation/stability summaries.
 - Safe AI Strategy Builder foundation that turns natural-language prompts into inert, validated strategy drafts and compiles them into existing API-compatible request payloads using a deterministic fake provider by default, with optional server-side OpenAI-compatible, OpenRouter, and LangChain structured-output provider support plus a constrained rule-based strategy DSL.
+- Backend-only LangGraph Research Copilot skeleton that orchestrates the existing safe draft, validation, compile, approval, optional workflow-run, and deterministic analysis steps through typed state. No public endpoint or frontend UI is exposed yet.
 - Richer risk analytics including rolling Sharpe, rolling volatility, rolling drawdown, drawdown duration, best/worst day, monthly returns, VaR, and CVaR.
 - Matplotlib chart helpers.
 - CLI commands for single-asset backtests and grid searches.
 - FastAPI API for local app integration.
 - Backtest Lab dashboard built with Next.js, TypeScript, Tailwind CSS, and Recharts, including a natural-language AI Builder UI that drafts and compiles inert strategy configs through FastAPI.
+- Backend-only Research Copilot graph package for future agent-style research orchestration with explicit approval gates.
 - pytest and mypy validation through Python CI.
 
 ## Project Layout
@@ -45,6 +47,7 @@ Backtester intentionally avoids backtesting-specific libraries such as backtrade
 Backtester/
 |-- backtester/
 |   |-- ai/
+|   |-- agents/
 |   |-- api/
 |   |-- data/
 |   |-- engine/
@@ -413,6 +416,7 @@ Current CI is `.github/workflows/ci.yml` and runs on push and pull request:
 ## Known Limitations
 
 - Backtest Lab research workflows are still single-asset only.
+- Research Copilot is backend-only. It has no public API endpoint, no Backtest Lab UI, and no session persistence yet.
 - AI Strategy Builder uses a fake deterministic provider by default and can call opt-in server-side OpenAI-compatible, OpenRouter, or LangChain OpenAI-compatible providers when configured. It rejects unsupported/unsafe requests, compiles only to existing request schemas, and never executes generated code. Rule-based DSL support is intentionally small: no generated Python, EMA/RSI, arbitrary formulas, multi-asset rules, or rule-grid optimization yet. The frontend can review and load compiled configs, but it does not run them automatically.
 - The Python engine supports multi-asset backtests, but the API, CLI, and frontend do not expose that workflow yet.
 - Grid search and walk-forward are intentionally deterministic heuristic research aids; robustness warnings are not predictions.

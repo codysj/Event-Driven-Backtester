@@ -16,6 +16,8 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
   - Fetches OHLCV data with yfinance, cleans it, validates schema, and caches Parquet files under `~/.backtester/cache/`.
 - `backtester/ai/`
   - Defines the safe natural-language strategy draft contract, prompt template, provider abstraction and factory, deterministic fake provider, optional OpenAI-compatible provider, optional LangChain OpenAI-compatible adapter, limited provider-output normalization, validation helpers, and compilers into existing API request schemas. Drafts and compiled payloads are inert data and are not executed.
+- `backtester/agents/`
+  - Defines a backend-only LangGraph Research Copilot skeleton. It moves from natural-language goal interpretation to inert AI draft, validation, compile, approval gate, optional approved workflow execution, deterministic result analysis, and next-step recommendation through typed state transitions.
 - `backtester/strategy/`
   - Defines `Strategy`, `MultiAssetStrategy`, `Signal`, built-in momentum and mean-reversion strategies, constrained rule DSL schemas, `RuleBasedStrategy`, and a wrapper for applying one single-asset strategy across multiple assets.
 - `backtester/portfolio/`
@@ -59,6 +61,8 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 - FastAPI `POST /api/walk-forward` wraps rolling train/test validation using grid-search-selected parameters per fold.
 - FastAPI `POST /api/ai/strategy-draft` wraps the AI Strategy Builder provider factory and returns validated structured drafts. The fake provider is the default; real providers are server-side opt-in.
 - FastAPI `POST /api/ai/compile` compiles validated drafts into existing API-compatible request payloads without running them.
+- `backtester/agents/research_graph.py` wires the research workflow with LangGraph when the backend dependency is installed. Importing the package does not require LangGraph; direct graph construction without it raises a sanitized dependency error, while the high-level runner can still use the same local state transitions for deterministic tests.
+- `backtester/agents/nodes.py` reuses the existing AI provider, draft validator, compiler, and API service wrappers. It never runs a compiled payload until an explicit matching `approved_action` is present.
 - Frontend `frontend/lib/api.ts` isolates API calls from UI components.
 - Frontend `frontend/lib/validation.ts` performs inline form validation before POST requests.
 
@@ -129,6 +133,18 @@ The core package is intentionally modular. Data loading, strategies, portfolio s
 5. When the user chooses to load the draft, frontend calls `POST /api/ai/compile`.
 6. The compile response payload is copied into the existing Single Run, Grid Search, or Walk-Forward form based on `target_mode`.
 7. The workflow form is shown for review. Backtest Lab does not execute the loaded request until the user runs the existing workflow.
+
+### Backend Research Copilot Graph Flow
+
+1. A backend caller creates a `ResearchGraphState` with a `user_goal`.
+2. The graph records `interpret_research_goal`, then calls the existing AI draft provider path to create an inert `StrategyDraft`.
+3. The draft passes through `backtester/ai/validator.py`, preserving warnings, unsupported concepts, and validation errors in state.
+4. The compiler maps ready drafts into one existing API request payload: single run, grid search, or walk-forward.
+5. The graph stops at `await_user_approval` with `approval_required=true` when a compiled payload is ready and no explicit approval is present.
+6. A resumed state may set `approved_action` to exactly one matching action: `run_backtest`, `run_grid_search`, or `run_walk_forward`.
+7. Mismatched approval is recorded as a validation error and no workflow is run.
+8. Approved execution uses thin wrappers around existing API service functions only. There are no filesystem, shell, generated-code, broker, live-trading, or persistence tools.
+9. Result analysis is deterministic and heuristic. It summarizes high drawdown, sparse trades, failed grid combinations, benchmark underperformance where available, and walk-forward degradation. It is transparent research commentary, not prediction.
 
 ### Browser Grid Search Flow
 
@@ -287,6 +303,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 ## Configuration And Environment
 
 - Python dependencies are in `requirements.txt` and `pyproject.toml`; optional LangChain provider dependencies are in the `ai-langchain` extra and `requirements-ai-langchain.txt`.
+- LangGraph powers the backend-only Research Copilot graph and is listed with backend Python dependencies. The graph module imports it lazily; missing installations do not affect the rest of the backend, and direct graph construction reports a sanitized dependency error.
 - Tests are configured in `pyproject.toml` with `testpaths = ["tests"]`.
 - Mypy is configured strict for Python 3.11 in `pyproject.toml`.
 - Frontend dependencies and scripts are in `frontend/package.json`.
@@ -322,6 +339,7 @@ The design system lives mostly in Tailwind classes plus `frontend/app/globals.cs
 - Frontend validation improves UX but does not replace API/Pydantic validation.
 - Robustness scoring is transparent deterministic heuristics only. It flags sparse trades, severe drawdowns, failed combinations, benchmark underperformance, and concentrated parameter performance; it is not ML and not a guarantee of strategy quality.
 - AI strategy drafts are never executable code. Real-provider output is treated as untrusted JSON, may pass through only limited deterministic normalization, and must pass Pydantic schema validation plus `validator.py`; unexpected fields, raw-code fields, unsupported indicators/operators, unsupported strategy kinds, broker execution, live trading, intraday minute bars, options flow, sentiment feeds, filesystem/code loading, and multi-asset portfolios are surfaced as unsupported or clarification-needed for the v1 builder. OpenRouter support does not change this flow: draft JSON is validated, compiled only into existing API request payloads, and never executed automatically.
+- The Research Copilot graph preserves that same boundary. It can resume and run one existing workflow only after explicit matching approval, and it does not add public API endpoints or frontend UI yet.
 - Backtest Lab favors the existing stack: Next.js, TypeScript, Tailwind CSS, Recharts, and small local components instead of heavy UI libraries.
 
 ## Needs Confirmation

@@ -79,6 +79,13 @@ Last documentation pass: 2026-05-08.
   - Semantic draft validator for dates, supported strategies, windows, unsupported concepts, and raw-code field rejection.
   - Compilers that map validated drafts into existing `BacktestRequest`, `GridSearchRequest`, and `WalkForwardRequest` payloads, including rule-based single-run payloads with `rule_spec`.
   - API endpoints return draft/compile status, warnings, unsupported items, and validation errors without executing workflows. Fake remains the default provider, including tests.
+- Backend-only Research Copilot skeleton:
+  - `backtester/agents/` package with typed `ResearchGraphState`, audit events, approval actions, workflow summaries, LangGraph wiring, small graph nodes, and safe workflow wrappers.
+  - Explicit graph steps: `interpret_research_goal`, `draft_strategy`, `validate_draft`, `compile_request`, `await_user_approval`, optional `run_workflow`, `analyze_results`, and `recommend_next_step`.
+  - The initial path drafts and compiles through existing safe AI services, then stops with `approval_required=true` before any backtest, grid-search, or walk-forward service call.
+  - A resumed state must provide a matching `approved_action` (`run_backtest`, `run_grid_search`, or `run_walk_forward`) before one existing workflow can run. Mismatched approval records a validation error and does not run.
+  - Deterministic result analysis surfaces heuristic notes for benchmark underperformance where available, high drawdown, sparse trades, failed grid combinations, and walk-forward degradation.
+  - No frontend UI, public API endpoint, generated code execution, shell/filesystem tools, broker integration, database persistence, or live trading was added.
 - Backtest Lab frontend:
   - Next.js 15 App Router, TypeScript, Tailwind CSS, Recharts.
   - Full-screen dark finance dashboard shell.
@@ -104,6 +111,7 @@ Last documentation pass: 2026-05-08.
 ## Known Incomplete Areas
 
 - Backtest Lab research workflows remain single-asset only.
+- Research Copilot is backend-only and has no FastAPI endpoint or Backtest Lab UI yet.
 - AI Strategy Builder can optionally call OpenRouter, another real OpenAI-compatible provider, or the optional LangChain OpenAI-compatible adapter when backend env vars and dependencies are configured. It does not execute compiled payloads, execute generated code, or expose API keys to the frontend. Rule-based support is single-run only in v1, and rule-based drafts must conform to the internal `rule_spec.rules` DSL. OpenRouter free models may be rate-limited, temporarily unavailable, lower quality than paid models, or prone to imperfect JSON/schema output; only limited deterministic normalization is applied before strict validation rejects the rest.
 - CLI does not expose multi-asset workflows.
 - Walk-forward is table-first; richer charts can be added later.
@@ -132,6 +140,7 @@ Last documentation pass: 2026-05-08.
 ## Recommended Next Tasks
 
 - Decide whether to expose multi-asset runs through FastAPI, CLI, and Backtest Lab.
+- Decide whether and how to expose the Research Copilot graph through FastAPI after the approval UX and state persistence story are designed.
 - Add richer walk-forward visuals if the table-first workflow needs more portfolio polish.
 - Add a small screenshot workflow and committed dashboard screenshot once the UI stabilizes.
 - Measure a pre-optimization baseline for `docs/benchmark_results.md`.
@@ -152,8 +161,9 @@ cd frontend && npm run build
 
 Recent documented results:
 
-- `.\.venv\Scripts\python.exe -m pytest`: success after adding the optional LangChain provider path. 191 passed.
-- `.\.venv\Scripts\python.exe -m mypy backtester`: success after adding the optional LangChain provider path. No issues found in 38 source files.
+- `.\.venv\Scripts\python.exe -m pip install "langgraph>=0.2,<1"`: success. Installed the newly declared backend Research Copilot graph dependency into the local venv for validation.
+- `.\.venv\Scripts\python.exe -m pytest`: success after adding the backend Research Copilot skeleton. 197 passed with LangGraph deprecation warnings from the installed dependency.
+- `.\.venv\Scripts\python.exe -m mypy backtester`: success after adding the backend Research Copilot skeleton. No issues found in 43 source files.
 - `python -m pytest`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `python -m mypy backtester`: not run successfully. PowerShell returned `python : The term 'python' is not recognized as the name of a cmdlet, function, script file, or operable program.`
 - `cmd /c npm run lint` from `frontend/`: success after adding the AI Builder UI.

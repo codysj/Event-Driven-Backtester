@@ -2,6 +2,12 @@
 
 ## Now
 
+- Backend-only LangGraph Research Copilot skeleton added:
+  - `backtester/agents/` typed state, graph nodes, LangGraph wiring, safe workflow wrappers, and deterministic result analysis.
+  - Graph flow drafts and compiles through existing AI Builder services, records warnings/errors/audit steps, and stops at an approval gate by default.
+  - Resumed states can run exactly one existing workflow only when `approved_action` matches the compiled target mode.
+  - No frontend UI, public API endpoint, generated strategy execution, shell/filesystem tool, database persistence, broker integration, or live trading was added.
+
 - AI Strategy Builder backend skeleton added:
   - `backtester/ai/` schemas, prompt template, provider abstraction/factory, deterministic fake provider, optional OpenAI-compatible provider, validator, and compilers.
   - OpenRouter is available as a first-class backend provider with default model `tencent/hy3-preview:free`, server-side bearer auth, chat-completions requests, and optional app attribution headers.
@@ -20,6 +26,8 @@ The latest research-workstation batch added:
 
 ## Next
 
+- Design the Research Copilot API contract and approval UX before exposing it to Backtest Lab.
+- Decide whether Research Copilot sessions need persistence, and if so design it separately from this skeleton.
 - Expose multi-asset backtesting through FastAPI if the dashboard roadmap needs it.
 - Expand the rule DSL only when there is a tested strategy intent contract for more indicators, OR composition, and research optimization.
 - Add multi-asset controls/results to Backtest Lab only after the API contract exists.
