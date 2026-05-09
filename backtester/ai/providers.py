@@ -793,7 +793,8 @@ def _load_langchain_openai_module() -> ModuleType:
         raise ProviderConfigurationError(
             "LangChain provider dependencies are not installed. Install the backtester ai-langchain extra before selecting BACKTESTER_AI_PROVIDER=langchain_openai_compatible."
         ) from exc
-    return langchain_openai
+    module: ModuleType = langchain_openai
+    return module
 
 
 def _parse_bool_env(raw: str | None, *, default: bool, name: str) -> bool:
