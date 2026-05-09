@@ -2,6 +2,8 @@
 
 AI-assisted strategy research platform for designing, testing, and analyzing trading strategies over historical market data.
 
+![Backtest Lab Demo](docs/demos/DemoHeader.gif)
+
 Backtest Lab AI combines a from-scratch event-driven Python backtesting engine, a FastAPI research API, a Next.js dashboard, a natural-language strategy builder, and a LangGraph-powered Research Copilot. The repository is still named `backtester` internally; the broader product surface is branded as Backtest Lab AI.
 
 > Research tool only. Not investment advice. No brokerage integration, live trading, or order placement.
@@ -24,16 +26,23 @@ The goal is not to build a trading product. The goal is to demonstrate the archi
 
 ### AI-Assisted Research
 
+![Strategy Builder](docs/demos/ai_builder.png)
+
 - Natural-language strategy builder that turns prompts into structured, validated strategy drafts.
 - Compile-only handoff into existing backtest, grid-search, or walk-forward API request schemas.
 - Backend-only provider configuration with deterministic fake, OpenRouter, OpenAI-compatible, DeepSeek, and optional LangChain OpenAI-compatible providers.
 - Strict Pydantic validation, semantic checks, sanitized errors, and extra-field rejection before workflow handoff.
 - Constrained rule-based strategy DSL instead of generated executable code.
+
+![Research Copilot](docs/demos/research_copilot.png)
+
 - Research Copilot workflow powered by backend graph state transitions.
 - Explicit approval gate before a Copilot-generated workflow can run.
 - Deterministic post-run analysis and next-step recommendations.
 
 ### Backtesting Engine
+
+![Single run](docs/demos/single_run.png)
 
 - Event-driven bar-by-bar simulation.
 - Pluggable strategy interfaces for single-asset and Python-side multi-asset workflows.
@@ -45,10 +54,15 @@ The goal is not to build a trading product. The goal is to demonstrate the archi
 
 ### Research Workflows
 
+![Grid Search](docs/demos/grid_search.png)
+
 - Single-run backtests.
 - Parameter grid search with failed-combination capture.
 - Heatmap-ready grid-search response data.
 - Deterministic robustness warnings.
+
+![Walk forward](docs/demos/walk_forward.png)
+
 - Walk-forward validation with train/test folds.
 - Parameter stability and degradation summaries.
 
