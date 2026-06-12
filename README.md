@@ -12,6 +12,7 @@ A from-scratch event-driven backtesting engine, a FastAPI research API, a Next.j
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-Agentic-FF6F00)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ![Backtest Lab Demo](docs/demos/DemoHeader.gif)
 
@@ -548,4 +549,4 @@ This project is a portfolio demonstration of the engineering behind a research p
 
 ## License
 
-No license is currently declared. A license should be added before publishing this repository publicly.
+Released under the [MIT License](LICENSE).
